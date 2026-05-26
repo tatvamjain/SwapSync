@@ -8,8 +8,13 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params;
-  const body = await request.json();
-  const result = await markListingSwapped(Number(id), String(body?.swapCode ?? ""));
+  const listingId = Number(id);
+  if (!Number.isFinite(listingId)) {
+    return NextResponse.json({ message: "Invalid listing id." }, { status: 400 });
+  }
+
+  const body = await request.json().catch(() => null);
+  const result = await markListingSwapped(listingId, String(body?.swapCode ?? ""));
 
   return NextResponse.json(
     { message: result.message },
