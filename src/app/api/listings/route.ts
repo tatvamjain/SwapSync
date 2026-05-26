@@ -3,7 +3,7 @@ import { createListing, getListingStats, getListingsPageData } from "@/lib/listi
 
 export const dynamic = "force-dynamic";
 
-const floors = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
+const floors = ["Ground", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
 const hostels = [
   "A",
   "B",
@@ -30,9 +30,10 @@ const anyRoomPreference = "Any Room";
 
 function floorForRoom(room: string) {
   const firstDigit = room.trim().match(/\d/)?.[0];
-  if (!firstDigit) return "1st";
+  if (!firstDigit) return "Ground";
+  if (firstDigit === "0") return "Ground";
 
-  return floors[Number(firstDigit) - 1] ?? "1st";
+  return floors[Number(firstDigit) - 1] ?? "Ground";
 }
 
 function floorOptionsForRoom(room: string) {
@@ -40,7 +41,7 @@ function floorOptionsForRoom(room: string) {
 }
 
 function isRoomNumber(value: string) {
-  return /^[1-8]\d*$/.test(value.trim());
+  return /^[0-8]\d{2}$/.test(value.trim());
 }
 
 function normalizeWhatsAppNumber(value: string) {

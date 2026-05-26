@@ -39,7 +39,7 @@ const hostels = [
   "FRF",
 ];
 const blocks = ["A", "B", "C", "D", "E", "F"];
-const floors = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
+const floors = ["Ground", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
 const anyRoomPreference = "Any Room";
 const allRoomTypes = [
   "1S Non-AC",
@@ -110,10 +110,11 @@ const hostelsForGender = (gender: Gender) =>
 const roomTypesForHostel = (hostel: string) => roomTypeAvailability[hostel] ?? allRoomTypes;
 const floorForRoom = (room: string) => {
   const firstDigit = room.trim().match(/\d/)?.[0];
-  if (!firstDigit) return "1st";
+  if (!firstDigit) return "Ground";
+  if (firstDigit === "0") return "Ground";
 
   const inferredFloor = floors[Number(firstDigit) - 1];
-  return inferredFloor ?? "1st";
+  return inferredFloor ?? "Ground";
 };
 const floorOptionsForRoom = (room: string) => {
   return [floorForRoom(room)];
@@ -144,7 +145,7 @@ function digitsOnly(value: string) {
 }
 
 function isRoomNumber(value: string) {
-  return /^[1-8]\d*$/.test(value.trim());
+  return /^[0-8]\d{2}$/.test(value.trim());
 }
 
 function isValidWhatsAppNumber(value: string) {
@@ -161,13 +162,13 @@ const blankListing: Omit<Listing, "id" | "posted"> = {
   hostel: "M",
   block: "A",
   room: "",
-  floor: "1st",
+  floor: "Ground",
   roomType: "2S AC Attached Shared by 2 Rooms (2S WST)",
   wants: {
     hostels: ["M"],
     blocks: ["A"],
     rooms: [],
-    floors: ["1st"],
+    floors: ["Ground"],
   },
   whatsapp: "",
   swapCode: "",
@@ -1135,7 +1136,7 @@ function PostModal({
               label="Room Number"
               value={form.room}
               onChange={(value) => {
-                const room = digitsOnly(value);
+                const room = digitsOnly(value).slice(0, 3);
                 setForm({ room, floor: floorForRoom(room) });
               }}
               placeholder="512"
@@ -1173,7 +1174,7 @@ function PostModal({
               <div className="flex gap-2">
                 <input
                   value={roomTag}
-                  onChange={(event) => setRoomTag(digitsOnly(event.target.value))}
+                  onChange={(event) => setRoomTag(digitsOnly(event.target.value).slice(0, 3))}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault();
