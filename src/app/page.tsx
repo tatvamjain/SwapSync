@@ -139,6 +139,19 @@ function normalizeWhatsAppNumber(value: string) {
   return withoutInternationalPrefix;
 }
 
+function digitsOnly(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function isRoomNumber(value: string) {
+  return /^[1-8]\d*$/.test(value.trim());
+}
+
+function isValidWhatsAppNumber(value: string) {
+  const normalized = normalizeWhatsAppNumber(value);
+  return /^91[6-9]\d{9}$/.test(normalized);
+}
+
 function buildContactWhatsAppUrl(listing: Listing) {
   const message = `Hey, I saw your SwapSync listing for Hostel ${listing.hostel} Room ${listing.room}. Want to discuss a room swap?`;
   return `https://wa.me/${normalizeWhatsAppNumber(listing.whatsapp)}?text=${encodeURIComponent(message)}`;
@@ -159,6 +172,26 @@ const blankListing: Omit<Listing, "id" | "posted"> = {
   whatsapp: "",
   swapCode: "",
 };
+
+function isCurrentRoomComplete(form: Omit<Listing, "id" | "posted">) {
+  return Boolean(
+    form.hostel &&
+      (form.hostel !== "M" || form.block) &&
+      isRoomNumber(form.room) &&
+      form.floor &&
+      form.roomType
+  );
+}
+
+function isWantedRoomComplete(form: Omit<Listing, "id" | "posted">) {
+  return Boolean(
+    form.wants.hostels.length &&
+      (!form.wants.hostels.includes("M") || form.wants.blocks.length) &&
+      form.wants.rooms.length &&
+      form.wants.floors.length &&
+      isValidWhatsAppNumber(form.whatsapp)
+  );
+}
 
 export default function Home() {
   const [listings, setListings] = useState<Listing[]>([]);
@@ -267,7 +300,7 @@ export default function Home() {
   }
 
   function addRoomTag() {
-    const value = roomTag.trim();
+    const value = digitsOnly(roomTag);
     if (!value || form.wants.rooms.includes(value)) return;
     setForm((current) => ({
       ...current,
@@ -292,6 +325,8 @@ export default function Home() {
 
   async function submitListing(event: FormEvent) {
     event.preventDefault();
+    if (!isCurrentRoomComplete(form) || !isWantedRoomComplete(form)) return;
+
     setIsSubmitting(true);
     const response = await fetch("/api/listings", {
       method: "POST",
@@ -988,6 +1023,8 @@ function PostModal({
 }) {
   const currentGender = genderForHostel(form.hostel);
   const allowedHostels = hostelsForGender(currentGender);
+  const canContinue = isCurrentRoomComplete(form);
+  const canPublish = canContinue && isWantedRoomComplete(form);
 
   return (
     <motion.div
@@ -1097,8 +1134,12 @@ function PostModal({
             <FormInput
               label="Room Number"
               value={form.room}
-              onChange={(value) => setForm({ room: value, floor: floorForRoom(value) })}
+              onChange={(value) => {
+                const room = digitsOnly(value);
+                setForm({ room, floor: floorForRoom(room) });
+              }}
               placeholder="512"
+              inputMode="numeric"
             />
             <FormSelect
               label="Floor"
@@ -1111,7 +1152,7 @@ function PostModal({
             </div>
             <button
               type="button"
-              disabled={!form.room}
+              disabled={!canContinue}
               onClick={() => setPostingStep(2)}
               className="sm:col-span-2 mt-2 h-13 rounded-full bg-white text-sm font-black text-[#070816] transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45"
             >
@@ -1132,7 +1173,7 @@ function PostModal({
               <div className="flex gap-2">
                 <input
                   value={roomTag}
-                  onChange={(event) => setRoomTag(event.target.value)}
+                  onChange={(event) => setRoomTag(digitsOnly(event.target.value))}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault();
@@ -1140,6 +1181,7 @@ function PostModal({
                     }
                   }}
                   placeholder="346"
+                  inputMode="numeric"
                   disabled={form.wants.rooms.includes(anyRoomPreference)}
                   className="h-12 min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/8 px-4 text-sm font-bold outline-none focus:border-cyan-300/60"
                 />
@@ -1163,10 +1205,16 @@ function PostModal({
               <ChipGroup title="Preferred Blocks" values={blocks} selected={form.wants.blocks} onToggle={(value) => toggleArray("blocks", value)} prefix="Block " />
             )}
             <ChipGroup title="Preferred Floors" values={floors} selected={form.wants.floors} onToggle={(value) => toggleArray("floors", value)} />
-            <FormInput label="WhatsApp Number" value={form.whatsapp} onChange={(value) => setForm({ whatsapp: value })} placeholder="91XXXXXXXXXX" />
+            <FormInput
+              label="WhatsApp Number"
+              value={form.whatsapp}
+              onChange={(value) => setForm({ whatsapp: digitsOnly(value).slice(0, 12) })}
+              placeholder="91XXXXXXXXXX"
+              inputMode="tel"
+            />
             <button
               type="submit"
-              disabled={isSubmitting || !form.whatsapp || !form.wants.hostels.length}
+              disabled={isSubmitting || !canPublish}
               className="h-14 w-full rounded-full bg-gradient-to-r from-cyan-300 via-blue-400 to-fuchsia-400 text-sm font-black text-[#050711] shadow-[0_20px_70px_rgba(56,189,248,0.28)] transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45"
             >
               {isSubmitting ? "Publishing..." : "Publish Swap Request"}
@@ -1215,11 +1263,13 @@ function FormInput({
   value,
   onChange,
   placeholder,
+  inputMode,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
+  inputMode?: "numeric" | "tel" | "text";
 }) {
   return (
     <label className="block">
@@ -1228,6 +1278,7 @@ function FormInput({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
+        inputMode={inputMode}
         className="h-13 w-full rounded-2xl border border-white/10 bg-white/8 px-4 text-sm font-bold outline-none placeholder:text-white/35 focus:border-cyan-300/60"
       />
     </label>
