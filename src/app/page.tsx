@@ -11,7 +11,6 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
-  Sparkles,
   X,
   Zap,
 } from "lucide-react";
@@ -532,11 +531,9 @@ function Navbar({
   return (
     <nav className="fixed left-0 right-0 top-0 z-40 border-b border-white/10 bg-[#060611]/72 backdrop-blur-2xl">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
-        <a href="#" className="flex items-center gap-2">
-          <span className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-cyan-300 via-blue-500 to-fuchsia-500 shadow-[0_0_35px_rgba(59,130,246,0.42)]">
-            <Sparkles className="h-5 w-5 text-white" />
-          </span>
-          <span className="text-lg font-black tracking-tight">SwapSync</span>
+        <a href="#" className="flex items-baseline gap-1.5">
+          <span className="text-xl font-black tracking-tight text-white">Swap</span>
+          <span className="text-xl font-black tracking-tight text-cyan-200">Sync</span>
         </a>
         <a href="#browse" className="ml-auto hidden text-sm font-bold text-white/72 transition hover:text-white md:block">
           Browse Swaps
