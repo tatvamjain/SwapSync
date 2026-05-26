@@ -39,7 +39,7 @@ const hostels = [
   "FRF",
 ];
 const blocks = ["A", "B", "C", "D", "E", "F"];
-const floors = ["Ground", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
+const floors = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
 const anyRoomPreference = "Any Room";
 const allRoomTypes = [
   "1S Non-AC",
@@ -110,11 +110,10 @@ const hostelsForGender = (gender: Gender) =>
 const roomTypesForHostel = (hostel: string) => roomTypeAvailability[hostel] ?? allRoomTypes;
 const floorForRoom = (room: string) => {
   const firstDigit = room.trim().match(/\d/)?.[0];
-  if (!firstDigit) return "Ground";
-  if (firstDigit === "0") return "Ground";
+  if (!firstDigit) return "1st";
 
   const inferredFloor = floors[Number(firstDigit) - 1];
-  return inferredFloor ?? "Ground";
+  return inferredFloor ?? "1st";
 };
 const floorOptionsForRoom = (room: string) => {
   return [floorForRoom(room)];
@@ -145,7 +144,7 @@ function digitsOnly(value: string) {
 }
 
 function isRoomNumber(value: string) {
-  return /^[0-8]\d{2}$/.test(value.trim());
+  return /^[1-8]\d{2}$/.test(value.trim());
 }
 
 function isValidWhatsAppNumber(value: string) {
@@ -162,13 +161,13 @@ const blankListing: Omit<Listing, "id" | "posted"> = {
   hostel: "M",
   block: "A",
   room: "",
-  floor: "Ground",
+  floor: "1st",
   roomType: "2S AC Attached Shared by 2 Rooms (2S WST)",
   wants: {
     hostels: ["M"],
     blocks: ["A"],
     rooms: [],
-    floors: ["Ground"],
+    floors: ["1st"],
   },
   whatsapp: "",
   swapCode: "",
