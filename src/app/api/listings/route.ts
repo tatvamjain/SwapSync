@@ -3,6 +3,19 @@ import { createListing, getListingStats, getListingsPageData } from "@/lib/listi
 
 export const dynamic = "force-dynamic";
 
+const floors = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
+
+function floorForRoom(room: string) {
+  const firstDigit = room.trim().match(/\d/)?.[0];
+  if (!firstDigit) return "1st";
+
+  return floors[Number(firstDigit) - 1] ?? "1st";
+}
+
+function floorOptionsForRoom(room: string) {
+  return [floorForRoom(room)];
+}
+
 export async function GET() {
   try {
     const data = await getListingsPageData();
@@ -19,12 +32,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Missing required listing fields." }, { status: 400 });
   }
 
+  const room = String(body.room);
+  const floor = String(body.floor);
+  if (!floorOptionsForRoom(room).includes(floor)) {
+    return NextResponse.json(
+      { message: "Floor must match the room number." },
+      { status: 400 }
+    );
+  }
+
   try {
     const result = await createListing({
       hostel: String(body.hostel),
       block: body.block ? String(body.block) : undefined,
-      room: String(body.room),
-      floor: String(body.floor),
+      room,
+      floor,
       roomType: String(body.roomType),
       wants: {
         hostels: Array.isArray(body.wants?.hostels) ? body.wants.hostels.map(String) : [],

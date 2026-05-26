@@ -48,18 +48,18 @@ const allRoomTypes = [
   "1S AC Attached",
   "2S Non-AC",
   "2S AC",
-  "2S AC Attached Shared",
-  "2S AC Attached Shared by 2 Rooms",
+  "2S AC Attached (2WAT)",
+  "2S AC Attached Shared by 2 Rooms (2S WST)",
   "3S Non-AC",
   "3S AC",
   "4S Non-AC",
   "4S AC",
 ];
 const roomTypeAvailability: Record<string, string[]> = {
-  A: ["2S AC Attached Shared by 2 Rooms"],
+  A: ["2S AC Attached Shared by 2 Rooms (2S WST)"],
   B: ["1S AC", "2S AC"],
   C: ["2S AC", "3S AC"],
-  D: ["2S AC Attached Shared by 2 Rooms"],
+  D: ["2S AC Attached Shared by 2 Rooms (2S WST)"],
   E: ["1S AC", "2S AC", "3S AC", "4S AC"],
   G: ["1S AC", "3S AC", "4S AC"],
   H: ["2S Non-AC", "2S AC", "3S Non-AC", "3S AC", "4S Non-AC", "4S AC"],
@@ -67,12 +67,12 @@ const roomTypeAvailability: Record<string, string[]> = {
   J: ["1S Non-AC", "1S AC", "2S Non-AC", "2S AC", "3S Non-AC", "4S Non-AC"],
   K: ["2S Non-AC", "2S AC"],
   L: ["2S AC"],
-  M: ["1S AC Attached Shared", "1S AC Attached", "2S AC Attached Shared", "2S AC Attached Shared by 2 Rooms"],
-  N: ["1S AC Attached Shared", "1S AC Attached", "2S AC Attached Shared by 2 Rooms"],
-  O: ["2S AC Attached Shared by 2 Rooms"],
-  "PG I": ["2S AC", "2S AC Attached Shared by 2 Rooms"],
-  "PG II": ["2S AC", "2S AC Attached Shared by 2 Rooms"],
-  Q: ["2S AC Attached Shared by 2 Rooms"],
+  M: ["1S AC Attached Shared", "1S AC Attached", "2S AC Attached (2WAT)", "2S AC Attached Shared by 2 Rooms (2S WST)"],
+  N: ["1S AC Attached Shared", "1S AC Attached", "2S AC Attached Shared by 2 Rooms (2S WST)"],
+  O: ["2S AC Attached Shared by 2 Rooms (2S WST)"],
+  "PG I": ["2S AC", "2S AC Attached Shared by 2 Rooms (2S WST)"],
+  "PG II": ["2S AC", "2S AC Attached Shared by 2 Rooms (2S WST)"],
+  Q: ["2S AC Attached Shared by 2 Rooms (2S WST)"],
   FRG: ["3S Non-AC", "3S AC"],
   FRF: ["3S Non-AC", "3S AC"],
 };
@@ -108,6 +108,16 @@ const genderForHostel = (hostel: string): Gender => (isGirlsHostel(hostel) ? "gi
 const hostelsForGender = (gender: Gender) =>
   hostels.filter((hostel) => genderForHostel(hostel) === gender);
 const roomTypesForHostel = (hostel: string) => roomTypeAvailability[hostel] ?? allRoomTypes;
+const floorForRoom = (room: string) => {
+  const firstDigit = room.trim().match(/\d/)?.[0];
+  if (!firstDigit) return "1st";
+
+  const inferredFloor = floors[Number(firstDigit) - 1];
+  return inferredFloor ?? "1st";
+};
+const floorOptionsForRoom = (room: string) => {
+  return [floorForRoom(room)];
+};
 const defaultStats: ListingStats = {
   activeCount: 0,
   mostWanted: "No requests yet",
@@ -139,7 +149,7 @@ const blankListing: Omit<Listing, "id" | "posted"> = {
   block: "A",
   room: "",
   floor: "1st",
-  roomType: "2S AC Attached Shared by 2 Rooms",
+  roomType: "2S AC Attached Shared by 2 Rooms (2S WST)",
   wants: {
     hostels: ["M"],
     blocks: ["A"],
@@ -1084,8 +1094,18 @@ function PostModal({
             {form.hostel === "M" && (
               <FormSelect label="Block" value={form.block || "A"} onChange={(value) => setForm({ block: value })} options={blocks} />
             )}
-            <FormInput label="Room Number" value={form.room} onChange={(value) => setForm({ room: value })} placeholder="512" />
-            <FormSelect label="Floor" value={form.floor} onChange={(value) => setForm({ floor: value })} options={floors} />
+            <FormInput
+              label="Room Number"
+              value={form.room}
+              onChange={(value) => setForm({ room: value, floor: floorForRoom(value) })}
+              placeholder="512"
+            />
+            <FormSelect
+              label="Floor"
+              value={form.floor}
+              onChange={(value) => setForm({ floor: value })}
+              options={floorOptionsForRoom(form.room)}
+            />
             <div className="sm:col-span-2">
               <FormSelect label="Room Type" value={form.roomType} onChange={(value) => setForm({ roomType: value })} options={roomTypesForHostel(form.hostel)} />
             </div>
