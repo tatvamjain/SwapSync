@@ -93,8 +93,15 @@ type Listing = {
     floors: string[];
   };
   whatsapp: string;
+  whatsappUrl?: string;
   swapCode?: string;
   posted: string;
+};
+
+type ListingStats = {
+  activeCount: number;
+  mostWanted: string;
+  completedSwaps: number;
 };
 
 const isGirlsHostel = (hostel: string) => girlsHostels.includes(hostel);
@@ -102,6 +109,31 @@ const genderForHostel = (hostel: string): Gender => (isGirlsHostel(hostel) ? "gi
 const hostelsForGender = (gender: Gender) =>
   hostels.filter((hostel) => genderForHostel(hostel) === gender);
 const roomTypesForHostel = (hostel: string) => roomTypeAvailability[hostel] ?? allRoomTypes;
+const defaultStats: ListingStats = {
+  activeCount: 0,
+  mostWanted: "No requests yet",
+  completedSwaps: 0,
+};
+
+function normalizeWhatsAppNumber(value: string) {
+  const digits = value.replace(/\D/g, "");
+  const withoutInternationalPrefix = digits.startsWith("00") ? digits.slice(2) : digits;
+
+  if (withoutInternationalPrefix.length === 10) {
+    return `91${withoutInternationalPrefix}`;
+  }
+
+  if (withoutInternationalPrefix.length === 11 && withoutInternationalPrefix.startsWith("0")) {
+    return `91${withoutInternationalPrefix.slice(1)}`;
+  }
+
+  return withoutInternationalPrefix;
+}
+
+function buildContactWhatsAppUrl(listing: Listing) {
+  const message = `Hey, I saw your SwapSync listing for Hostel ${listing.hostel} Room ${listing.room}. Want to discuss a room swap?`;
+  return `https://wa.me/${normalizeWhatsAppNumber(listing.whatsapp)}?text=${encodeURIComponent(message)}`;
+}
 
 const blankListing: Omit<Listing, "id" | "posted"> = {
   hostel: "M",
@@ -121,6 +153,7 @@ const blankListing: Omit<Listing, "id" | "posted"> = {
 
 export default function Home() {
   const [listings, setListings] = useState<Listing[]>([]);
+  const [listingStats, setListingStats] = useState<ListingStats>(defaultStats);
   const [modalOpen, setModalOpen] = useState(false);
   const [postingStep, setPostingStep] = useState(1);
   const [form, setForm] = useState(blankListing);
@@ -150,12 +183,14 @@ export default function Home() {
       try {
         const response = await fetch("/api/listings", { cache: "no-store" });
         if (!response.ok) return;
-        const data = (await response.json()) as { listings: Listing[] };
+        const data = (await response.json()) as { listings: Listing[]; stats: ListingStats };
         if (!cancelled) {
           setListings(data.listings);
+          setListingStats(data.stats ?? defaultStats);
         }
       } catch {
-        // Keep seeded client data if the API is unavailable during local development.
+        setListings([]);
+        setListingStats(defaultStats);
       }
     }
 
@@ -182,10 +217,27 @@ export default function Home() {
   }, [activeGender, listings, onlyAc, onlyAttached, search, selectedBlock, selectedFloor, selectedHostel, selectedRoomType]);
 
   const stats = [
-    { label: "Active swap requests", value: listings.length * 38 + 124 },
-    { label: "Most wanted hostel", value: "M Block C" },
-    { label: "Recent swaps", value: "27 today" },
+    { label: "Active swap requests", value: listingStats.activeCount },
+    { label: "Most wanted hostel", value: listingStats.mostWanted },
+    { label: "Completed swaps", value: listingStats.completedSwaps },
   ];
+
+  const trendingHostels = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const listing of listings) {
+      if (genderForHostel(listing.hostel) !== activeGender) continue;
+      const key = listing.block ? `${listing.hostel}-${listing.block}` : listing.hostel;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([key]) => {
+        const [hostel, block] = key.split("-");
+        return { hostel, block };
+      });
+  }, [activeGender, listings]);
 
   function updateForm(next: Partial<typeof form>) {
     setForm((current) => ({ ...current, ...next }));
@@ -244,9 +296,11 @@ export default function Home() {
       listing: Listing;
       swapCode: string;
       whatsappUrl: string;
+      stats: ListingStats;
     };
     const listing = result.listing;
     setListings((current) => [listing, ...current]);
+    setListingStats(result.stats ?? defaultStats);
     setSelectedGender(genderForHostel(form.hostel));
     setSelectedHostel(form.hostel);
     setPostedCode(result.swapCode);
@@ -263,12 +317,13 @@ export default function Home() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ swapCode: swapCodeInput }),
     });
+    const data = (await response.json().catch(() => null)) as { message?: string; stats?: ListingStats } | null;
     if (!response.ok) {
-      const data = (await response.json().catch(() => null)) as { message?: string } | null;
       setSwapCodeError(data?.message ?? "That code does not match this listing.");
       return;
     }
     setListings((current) => current.filter((listing) => listing.id !== swapCheck.id));
+    setListingStats(data?.stats ?? defaultStats);
     setSwapCheck(null);
     setSwapCodeInput("");
     setSwapCodeError("");
@@ -282,7 +337,7 @@ export default function Home() {
         setSearch={setSearch}
         onPost={() => setModalOpen(true)}
       />
-      <Hero stats={stats} onPost={() => setModalOpen(true)} />
+      <Hero stats={stats} featuredListings={listings.slice(0, 4)} onPost={() => setModalOpen(true)} />
       <section id="browse" className="mx-auto w-full max-w-7xl px-4 pb-24 pt-5 sm:px-6 lg:px-8">
         <div className="mb-5 flex items-end justify-between gap-4">
           <div>
@@ -350,29 +405,32 @@ export default function Home() {
           setSearch={setSearch}
         />
 
+        {trendingHostels.length > 0 && (
         <div className="mb-5 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
-          {(activeGender === "girls" ? ["E", "G", "I", "N", "Q", "PG I", "PG II"] : ["M", "H", "A", "B", "C", "J", "L"]).map((hostel) => (
+          {trendingHostels.map(({ hostel, block }) => (
             <button
-              key={hostel}
+              key={`${hostel}-${block ?? ""}`}
               onClick={() => {
                 setSelectedHostel(hostel);
+                setSelectedBlock(block ?? "");
                 if (selectedRoomType && !roomTypesForHostel(hostel).includes(selectedRoomType)) {
                   setSelectedRoomType("");
                 }
-                if (hostel !== "M") {
+                if (hostel !== "M" || !block) {
                   setSelectedBlock("");
                 }
               }}
               className={`shrink-0 rounded-full border px-4 py-2 text-sm font-bold transition ${
-                selectedHostel === hostel
+                selectedHostel === hostel && (!block || selectedBlock === block)
                   ? "border-cyan-300/70 bg-cyan-300/15 text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,0.22)]"
                   : "border-white/10 bg-white/7 text-white/70 hover:border-white/25 hover:text-white"
               }`}
             >
-              Trending Hostel {hostel}
+              Active Hostel {hostel}{block ? ` Block ${block}` : ""}
             </button>
           ))}
         </div>
+        )}
 
         {filteredListings.length ? (
           <motion.div layout className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -503,26 +561,36 @@ function Navbar({
   );
 }
 
-function Hero({ stats, onPost }: { stats: { label: string; value: string | number }[]; onPost: () => void }) {
-  const floating = [
-    { hostel: "M-C", room: "512", type: "2S AC", className: "left-[4%] top-28 hidden md:block", rotate: "-6deg" },
-    { hostel: "PG I", room: "701", type: "2S AC", className: "right-[5%] top-24 hidden sm:block", rotate: "5deg" },
-    { hostel: "G", room: "208", type: "1S AC", className: "left-[14%] bottom-12 hidden md:block", rotate: "4deg" },
-    { hostel: "H", room: "431", type: "3S", className: "right-[16%] bottom-10 hidden md:block", rotate: "-4deg" },
+function Hero({
+  stats,
+  featuredListings,
+  onPost,
+}: {
+  stats: { label: string; value: string | number }[];
+  featuredListings: Listing[];
+  onPost: () => void;
+}) {
+  const positions = [
+    { className: "left-[4%] top-28 hidden md:block", rotate: "-6deg" },
+    { className: "right-[5%] top-24 hidden sm:block", rotate: "5deg" },
+    { className: "left-[14%] bottom-12 hidden md:block", rotate: "4deg" },
+    { className: "right-[16%] bottom-10 hidden md:block", rotate: "-4deg" },
   ];
 
   return (
     <section className="relative px-4 pb-10 pt-28 sm:px-6 lg:px-8">
       <div className="absolute inset-0 -z-10 bg-[linear-gradient(115deg,rgba(59,130,246,0.16),rgba(217,70,239,0.10),rgba(34,211,238,0.12))] animated-gradient" />
-      {floating.map((card, index) => (
+      {featuredListings.slice(0, positions.length).map((listing, index) => (
         <div
-          key={card.hostel}
-          className={`float-card glass absolute w-32 rounded-[1.7rem] p-4 opacity-80 ${card.className}`}
-          style={{ "--rotate": card.rotate, animationDelay: `${index * 0.6}s` } as React.CSSProperties}
+          key={listing.id}
+          className={`float-card glass absolute w-32 rounded-[1.7rem] p-4 opacity-80 ${positions[index].className}`}
+          style={{ "--rotate": positions[index].rotate, animationDelay: `${index * 0.6}s` } as React.CSSProperties}
         >
-          <p className="text-xs font-black text-cyan-200">Hostel {card.hostel}</p>
-          <p className="mt-2 text-3xl font-black">{card.room}</p>
-          <p className="mt-1 text-xs font-bold text-white/55">{card.type}</p>
+          <p className="text-xs font-black text-cyan-200">
+            Hostel {listing.hostel}{listing.block ? `-${listing.block}` : ""}
+          </p>
+          <p className="mt-2 text-3xl font-black">{listing.room}</p>
+          <p className="mt-1 text-xs font-bold text-white/55">{listing.roomType}</p>
         </div>
       ))}
       <div className="mx-auto max-w-4xl text-center">
@@ -695,7 +763,7 @@ function ListingCard({
     `${listing.floor} Floor`,
   ].filter(Boolean);
   const perfect = listing.wants.hostels.includes(listing.hostel) || listing.wants.rooms.includes(listing.room);
-  const whatsappUrl = `https://wa.me/${listing.whatsapp}?text=${encodeURIComponent(`Hey, I saw your SwapSync listing for Hostel ${listing.hostel} Room ${listing.room}. Want to discuss a room swap?`)}`;
+  const whatsappUrl = listing.whatsappUrl ?? buildContactWhatsAppUrl(listing);
 
   return (
     <motion.article

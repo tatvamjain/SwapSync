@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { markListingSwapped } from "@/lib/listings-store";
+import { getListingStats, markListingSwapped } from "@/lib/listings-store";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +15,10 @@ export async function POST(
 
   const body = await request.json().catch(() => null);
   const result = await markListingSwapped(listingId, String(body?.swapCode ?? ""));
+  const stats = result.ok ? await getListingStats() : undefined;
 
   return NextResponse.json(
-    { message: result.message },
+    { message: result.message, stats },
     { status: result.status }
   );
 }

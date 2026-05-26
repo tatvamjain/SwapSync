@@ -23,6 +23,12 @@ export type Listing = {
 
 export type PublicListing = Omit<Listing, "swapCode">;
 
+export type ListingStats = {
+  activeCount: number;
+  mostWanted: string;
+  completedSwaps: number;
+};
+
 type ListingRow = {
   id: number;
   hostel: string;
@@ -115,9 +121,89 @@ function generateSwapCode(hostel: string, room: string) {
   return `SYNC-${hostel.replace(/\s/g, "")}${room}-${randomPart}`.toUpperCase();
 }
 
+function normalizeWhatsAppNumber(value: string) {
+  const digits = value.replace(/\D/g, "");
+  const withoutInternationalPrefix = digits.startsWith("00") ? digits.slice(2) : digits;
+
+  if (withoutInternationalPrefix.length === 10) {
+    return `91${withoutInternationalPrefix}`;
+  }
+
+  if (withoutInternationalPrefix.length === 11 && withoutInternationalPrefix.startsWith("0")) {
+    return `91${withoutInternationalPrefix.slice(1)}`;
+  }
+
+  return withoutInternationalPrefix;
+}
+
 function buildWhatsAppUrl(listing: Listing) {
-  const message = `Your SwapSync post is live.\n\nRoom: Hostel ${listing.hostel}${listing.block ? ` Block ${listing.block}` : ""}, Room ${listing.room}\nSwap completion code: ${listing.swapCode}\n\nKeep this code safe. You will need it to mark your post as swapped.\n\nTap send in WhatsApp to save this message in your chat.`;
-  return `https://wa.me/${listing.whatsapp}?text=${encodeURIComponent(message)}`;
+  const phoneNumber = normalizeWhatsAppNumber(listing.whatsapp);
+  const message = `Your SwapSync secret key is ${listing.swapCode}.\n\nRoom: Hostel ${listing.hostel}${listing.block ? ` Block ${listing.block}` : ""}, Room ${listing.room}\n\nKeep this key safe. You will need it to mark your post as swapped.`;
+  return `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+}
+
+function buildContactWhatsAppUrl(listing: PublicListing) {
+  const phoneNumber = normalizeWhatsAppNumber(listing.whatsapp);
+  const message = `Hey, I saw your SwapSync listing for Hostel ${listing.hostel} Room ${listing.room}. Want to discuss a room swap?`;
+  return `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+}
+
+function getMostWanted(rows: ListingRow[]) {
+  const counts = new Map<string, number>();
+
+  for (const row of rows) {
+    for (const hostel of row.wants.hostels) {
+      if (hostel === "M" && row.wants.blocks.length) {
+        for (const block of row.wants.blocks) {
+          const key = `M Block ${block}`;
+          counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+      } else {
+        counts.set(`Hostel ${hostel}`, (counts.get(`Hostel ${hostel}`) ?? 0) + 1);
+      }
+    }
+  }
+
+  const [mostWanted] = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  return mostWanted?.[0] ?? "No requests yet";
+}
+
+async function getCompletedSwaps() {
+  const { count, error } = await getSupabase()
+    .from("listings")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "swapped");
+
+  if (error) {
+    throw new Error(`Unable to load swap stats: ${error.message}`);
+  }
+
+  return count ?? 0;
+}
+
+export async function getListingStats(activeRows?: ListingRow[]): Promise<ListingStats> {
+  let rows = activeRows;
+
+  if (!rows) {
+    const { data, error } = await getSupabase()
+      .from("listings")
+      .select("*")
+      .eq("status", "active");
+
+    if (error) {
+      throw new Error(`Unable to load listing stats: ${error.message}`);
+    }
+
+    rows = data as ListingRow[];
+  }
+
+  const activeListings = rows;
+
+  return {
+    activeCount: activeListings.length,
+    mostWanted: getMostWanted(activeListings),
+    completedSwaps: await getCompletedSwaps(),
+  };
 }
 
 export async function getActiveListings() {
@@ -134,6 +220,28 @@ export async function getActiveListings() {
   return (data as ListingRow[]).map(rowToListing).map(toPublicListing);
 }
 
+export async function getListingsPageData() {
+  const { data, error } = await getSupabase()
+    .from("listings")
+    .select("*")
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Unable to load listings: ${error.message}`);
+  }
+
+  const rows = data as ListingRow[];
+
+  return {
+    listings: rows.map(rowToListing).map(toPublicListing).map((listing) => ({
+      ...listing,
+      whatsappUrl: buildContactWhatsAppUrl(listing),
+    })),
+    stats: await getListingStats(rows),
+  };
+}
+
 export async function createListing(input: Omit<Listing, "id" | "swapCode" | "posted" | "createdAt" | "status">) {
   const listing: ListingInsert = {
     hostel: input.hostel,
@@ -142,7 +250,7 @@ export async function createListing(input: Omit<Listing, "id" | "swapCode" | "po
     floor: input.floor,
     room_type: input.roomType,
     wants: input.wants,
-    whatsapp: input.whatsapp,
+    whatsapp: normalizeWhatsAppNumber(input.whatsapp),
     swap_code: generateSwapCode(input.hostel, input.room),
     status: "active",
   };

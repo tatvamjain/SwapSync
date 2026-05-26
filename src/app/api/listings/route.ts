@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { createListing, getActiveListings } from "@/lib/listings-store";
+import { createListing, getListingStats, getListingsPageData } from "@/lib/listings-store";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const listings = await getActiveListings();
-    return NextResponse.json({ listings });
+    const data = await getListingsPageData();
+    return NextResponse.json(data);
   } catch (error) {
     console.error(error);
     return NextResponse.json({ message: "Unable to load listings." }, { status: 500 });
@@ -35,7 +35,9 @@ export async function POST(request: Request) {
       whatsapp: String(body.whatsapp),
     });
 
-    return NextResponse.json(result, { status: 201 });
+    const stats = await getListingStats();
+
+    return NextResponse.json({ ...result, stats }, { status: 201 });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ message: "Unable to create listing." }, { status: 500 });
