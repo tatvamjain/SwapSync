@@ -1,6 +1,5 @@
 import { randomBytes } from "crypto";
-import { mkdir, readFile, writeFile } from "fs/promises";
-import path from "path";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export type Listing = {
   id: number;
@@ -24,8 +23,51 @@ export type Listing = {
 
 export type PublicListing = Omit<Listing, "swapCode">;
 
-const dataDir = path.join(process.cwd(), "data");
-const dataFile = path.join(dataDir, "listings.json");
+export type ListingStats = {
+  activeCount: number;
+  mostWanted: string;
+  completedSwaps: number;
+};
+
+type ListingRow = {
+  id: number;
+  hostel: string;
+  block: string | null;
+  room: string;
+  floor: string;
+  room_type: string;
+  wants: Listing["wants"];
+  whatsapp: string;
+  swap_code: string;
+  created_at: string;
+  status: Listing["status"];
+};
+
+type ListingInsert = Omit<ListingRow, "id" | "created_at">;
+
+let supabase: SupabaseClient | null = null;
+
+function getSupabase() {
+  if (supabase) return supabase;
+
+  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error(
+      "Missing Supabase environment variables. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY."
+    );
+  }
+
+  supabase = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+
+  return supabase;
+}
 
 function toPublicListing(listing: Listing): PublicListing {
   return {
@@ -43,24 +85,35 @@ function toPublicListing(listing: Listing): PublicListing {
   };
 }
 
-async function ensureDataFile() {
-  await mkdir(dataDir, { recursive: true });
-  try {
-    await readFile(dataFile, "utf8");
-  } catch {
-    await writeFile(dataFile, JSON.stringify([], null, 2));
-  }
+function formatPosted(createdAt: string) {
+  const elapsedMs = Date.now() - new Date(createdAt).getTime();
+  const elapsedMinutes = Math.max(0, Math.floor(elapsedMs / 60_000));
+
+  if (elapsedMinutes < 1) return "just now";
+  if (elapsedMinutes < 60) return `${elapsedMinutes}m ago`;
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) return `${elapsedHours}h ago`;
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  return `${elapsedDays}d ago`;
 }
 
-async function readListings() {
-  await ensureDataFile();
-  const raw = await readFile(dataFile, "utf8");
-  return JSON.parse(raw) as Listing[];
-}
-
-async function writeListings(listings: Listing[]) {
-  await mkdir(dataDir, { recursive: true });
-  await writeFile(dataFile, JSON.stringify(listings, null, 2));
+function rowToListing(row: ListingRow): Listing {
+  return {
+    id: row.id,
+    hostel: row.hostel,
+    block: row.block ?? undefined,
+    room: row.room,
+    floor: row.floor,
+    roomType: row.room_type,
+    wants: row.wants,
+    whatsapp: row.whatsapp,
+    swapCode: row.swap_code,
+    posted: formatPosted(row.created_at),
+    createdAt: row.created_at,
+    status: row.status,
+  };
 }
 
 function generateSwapCode(hostel: string, room: string) {
@@ -68,47 +121,184 @@ function generateSwapCode(hostel: string, room: string) {
   return `SYNC-${hostel.replace(/\s/g, "")}${room}-${randomPart}`.toUpperCase();
 }
 
+function normalizeWhatsAppNumber(value: string) {
+  const digits = value.replace(/\D/g, "");
+  const withoutInternationalPrefix = digits.startsWith("00") ? digits.slice(2) : digits;
+
+  if (withoutInternationalPrefix.length === 10) {
+    return `91${withoutInternationalPrefix}`;
+  }
+
+  if (withoutInternationalPrefix.length === 11 && withoutInternationalPrefix.startsWith("0")) {
+    return `91${withoutInternationalPrefix.slice(1)}`;
+  }
+
+  return withoutInternationalPrefix;
+}
+
 function buildWhatsAppUrl(listing: Listing) {
-  const message = `Your SwapSync post is live.\n\nRoom: Hostel ${listing.hostel}${listing.block ? ` Block ${listing.block}` : ""}, Room ${listing.room}\nSwap completion code: ${listing.swapCode}\n\nKeep this code safe. You will need it to mark your post as swapped.\n\nTap send in WhatsApp to save this message in your chat.`;
-  return `https://wa.me/${listing.whatsapp}?text=${encodeURIComponent(message)}`;
+  const phoneNumber = normalizeWhatsAppNumber(listing.whatsapp);
+  const message = `Your SwapSync secret key is ${listing.swapCode}.\n\nRoom: Hostel ${listing.hostel}${listing.block ? ` Block ${listing.block}` : ""}, Room ${listing.room}\n\nKeep this key safe. You will need it to mark your post as swapped.`;
+  return `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+}
+
+function buildContactWhatsAppUrl(listing: PublicListing) {
+  const phoneNumber = normalizeWhatsAppNumber(listing.whatsapp);
+  const message = `Hey, I saw your SwapSync listing for Hostel ${listing.hostel} Room ${listing.room}. Want to discuss a room swap?`;
+  return `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+}
+
+function getMostWanted(rows: ListingRow[]) {
+  const counts = new Map<string, number>();
+
+  for (const row of rows) {
+    for (const hostel of row.wants.hostels) {
+      if (hostel === "M" && row.wants.blocks.length) {
+        for (const block of row.wants.blocks) {
+          const key = `M Block ${block}`;
+          counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+      } else {
+        counts.set(`Hostel ${hostel}`, (counts.get(`Hostel ${hostel}`) ?? 0) + 1);
+      }
+    }
+  }
+
+  const [mostWanted] = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  return mostWanted?.[0] ?? "No requests yet";
+}
+
+async function getCompletedSwaps() {
+  const { count, error } = await getSupabase()
+    .from("listings")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "swapped");
+
+  if (error) {
+    throw new Error(`Unable to load swap stats: ${error.message}`);
+  }
+
+  return count ?? 0;
+}
+
+export async function getListingStats(activeRows?: ListingRow[]): Promise<ListingStats> {
+  let rows = activeRows;
+
+  if (!rows) {
+    const { data, error } = await getSupabase()
+      .from("listings")
+      .select("*")
+      .eq("status", "active");
+
+    if (error) {
+      throw new Error(`Unable to load listing stats: ${error.message}`);
+    }
+
+    rows = data as ListingRow[];
+  }
+
+  const activeListings = rows;
+
+  return {
+    activeCount: activeListings.length,
+    mostWanted: getMostWanted(activeListings),
+    completedSwaps: await getCompletedSwaps(),
+  };
 }
 
 export async function getActiveListings() {
-  const listings = await readListings();
-  return listings.filter((listing) => listing.status === "active").map(toPublicListing);
+  const { data, error } = await getSupabase()
+    .from("listings")
+    .select("*")
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Unable to load listings: ${error.message}`);
+  }
+
+  return (data as ListingRow[]).map(rowToListing).map(toPublicListing);
+}
+
+export async function getListingsPageData() {
+  const { data, error } = await getSupabase()
+    .from("listings")
+    .select("*")
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Unable to load listings: ${error.message}`);
+  }
+
+  const rows = data as ListingRow[];
+
+  return {
+    listings: rows.map(rowToListing).map(toPublicListing).map((listing) => ({
+      ...listing,
+      whatsappUrl: buildContactWhatsAppUrl(listing),
+    })),
+    stats: await getListingStats(rows),
+  };
 }
 
 export async function createListing(input: Omit<Listing, "id" | "swapCode" | "posted" | "createdAt" | "status">) {
-  const listings = await readListings();
-  const listing: Listing = {
-    ...input,
-    id: Date.now(),
-    block: input.hostel === "M" ? input.block : undefined,
-    swapCode: generateSwapCode(input.hostel, input.room),
-    posted: "just now",
-    createdAt: new Date().toISOString(),
+  const listing: ListingInsert = {
+    hostel: input.hostel,
+    block: input.hostel === "M" ? input.block ?? null : null,
+    room: input.room,
+    floor: input.floor,
+    room_type: input.roomType,
+    wants: input.wants,
+    whatsapp: normalizeWhatsAppNumber(input.whatsapp),
+    swap_code: generateSwapCode(input.hostel, input.room),
     status: "active",
   };
-  await writeListings([listing, ...listings]);
+
+  const { data, error } = await getSupabase()
+    .from("listings")
+    .insert(listing)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(`Unable to create listing: ${error.message}`);
+  }
+
+  const createdListing = rowToListing(data as ListingRow);
+
   return {
-    listing: toPublicListing(listing),
-    swapCode: listing.swapCode,
-    whatsappUrl: buildWhatsAppUrl(listing),
+    listing: toPublicListing(createdListing),
+    swapCode: createdListing.swapCode,
+    whatsappUrl: buildWhatsAppUrl(createdListing),
   };
 }
 
 export async function markListingSwapped(id: number, swapCode: string) {
-  const listings = await readListings();
-  const listing = listings.find((item) => item.id === id);
-  if (!listing || listing.status !== "active") {
+  const { data, error } = await getSupabase()
+    .from("listings")
+    .select("*")
+    .eq("id", id)
+    .eq("status", "active")
+    .single();
+
+  if (error || !data) {
     return { ok: false, status: 404, message: "Listing not found." };
   }
+
+  const listing = rowToListing(data as ListingRow);
   if (listing.swapCode !== swapCode.trim().toUpperCase()) {
     return { ok: false, status: 403, message: "That code does not match this listing." };
   }
-  const nextListings = listings.map((item) =>
-    item.id === id ? { ...item, status: "swapped" as const } : item
-  );
-  await writeListings(nextListings);
+
+  const { error: updateError } = await getSupabase()
+    .from("listings")
+    .update({ status: "swapped" })
+    .eq("id", id);
+
+  if (updateError) {
+    return { ok: false, status: 500, message: "Unable to mark this listing as swapped." };
+  }
+
   return { ok: true, status: 200, message: "Listing marked as swapped." };
 }

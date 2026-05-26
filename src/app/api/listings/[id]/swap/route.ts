@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { markListingSwapped } from "@/lib/listings-store";
+import { getListingStats, markListingSwapped } from "@/lib/listings-store";
 
 export const dynamic = "force-dynamic";
 
@@ -8,11 +8,17 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params;
-  const body = await request.json();
-  const result = await markListingSwapped(Number(id), String(body?.swapCode ?? ""));
+  const listingId = Number(id);
+  if (!Number.isFinite(listingId)) {
+    return NextResponse.json({ message: "Invalid listing id." }, { status: 400 });
+  }
+
+  const body = await request.json().catch(() => null);
+  const result = await markListingSwapped(listingId, String(body?.swapCode ?? ""));
+  const stats = result.ok ? await getListingStats() : undefined;
 
   return NextResponse.json(
-    { message: result.message },
+    { message: result.message, stats },
     { status: result.status }
   );
 }
