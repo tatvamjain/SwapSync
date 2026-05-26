@@ -1,0 +1,1191 @@
+"use client";
+
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  ArrowRight,
+  BedDouble,
+  Check,
+  ChevronDown,
+  Flame,
+  MessageCircle,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  X,
+  Zap,
+} from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+
+const girlsHostels = ["E", "G", "I", "N", "Q", "PG I", "PG II"];
+const hostels = [
+  "A",
+  "B",
+  "C",
+  "D",
+  "E",
+  "G",
+  "H",
+  "I",
+  "J",
+  "K",
+  "L",
+  "M",
+  "N",
+  "O",
+  "Q",
+  "PG I",
+  "PG II",
+  "FRG",
+  "FRF",
+];
+const blocks = ["A", "B", "C", "D", "E", "F"];
+const floors = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
+const anyRoomPreference = "Any Room";
+const allRoomTypes = [
+  "1S Non-AC",
+  "1S AC",
+  "1S AC Attached Shared",
+  "1S AC Attached",
+  "2S Non-AC",
+  "2S AC",
+  "2S AC Attached Shared",
+  "2S AC Attached Shared by 2 Rooms",
+  "3S Non-AC",
+  "3S AC",
+  "4S Non-AC",
+  "4S AC",
+];
+const roomTypeAvailability: Record<string, string[]> = {
+  A: ["2S AC Attached Shared by 2 Rooms"],
+  B: ["1S AC", "2S AC"],
+  C: ["2S AC", "3S AC"],
+  D: ["2S AC Attached Shared by 2 Rooms"],
+  E: ["1S AC", "2S AC", "3S AC", "4S AC"],
+  G: ["1S AC", "3S AC", "4S AC"],
+  H: ["2S Non-AC", "2S AC", "3S Non-AC", "3S AC", "4S Non-AC", "4S AC"],
+  I: ["1S Non-AC", "1S AC", "2S AC", "3S Non-AC", "3S AC"],
+  J: ["1S Non-AC", "1S AC", "2S Non-AC", "2S AC", "3S Non-AC", "4S Non-AC"],
+  K: ["2S Non-AC", "2S AC"],
+  L: ["2S AC"],
+  M: ["1S AC Attached Shared", "1S AC Attached", "2S AC Attached Shared", "2S AC Attached Shared by 2 Rooms"],
+  N: ["1S AC Attached Shared", "1S AC Attached", "2S AC Attached Shared by 2 Rooms"],
+  O: ["2S AC Attached Shared by 2 Rooms"],
+  "PG I": ["2S AC", "2S AC Attached Shared by 2 Rooms"],
+  "PG II": ["2S AC", "2S AC Attached Shared by 2 Rooms"],
+  Q: ["2S AC Attached Shared by 2 Rooms"],
+  FRG: ["3S Non-AC", "3S AC"],
+  FRF: ["3S Non-AC", "3S AC"],
+};
+type Gender = "girls" | "boys";
+
+type Listing = {
+  id: number;
+  hostel: string;
+  block?: string;
+  room: string;
+  floor: string;
+  roomType: string;
+  wants: {
+    hostels: string[];
+    blocks: string[];
+    rooms: string[];
+    floors: string[];
+  };
+  whatsapp: string;
+  swapCode?: string;
+  posted: string;
+};
+
+const isGirlsHostel = (hostel: string) => girlsHostels.includes(hostel);
+const genderForHostel = (hostel: string): Gender => (isGirlsHostel(hostel) ? "girls" : "boys");
+const hostelsForGender = (gender: Gender) =>
+  hostels.filter((hostel) => genderForHostel(hostel) === gender);
+const roomTypesForHostel = (hostel: string) => roomTypeAvailability[hostel] ?? allRoomTypes;
+
+const blankListing: Omit<Listing, "id" | "posted"> = {
+  hostel: "M",
+  block: "A",
+  room: "",
+  floor: "1st",
+  roomType: "2S AC Attached Shared by 2 Rooms",
+  wants: {
+    hostels: ["M"],
+    blocks: ["A"],
+    rooms: [],
+    floors: ["1st"],
+  },
+  whatsapp: "",
+  swapCode: "",
+};
+
+export default function Home() {
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [postingStep, setPostingStep] = useState(1);
+  const [form, setForm] = useState(blankListing);
+  const [roomTag, setRoomTag] = useState("");
+  const [search, setSearch] = useState("");
+  const [selectedGender, setSelectedGender] = useState<Gender>("boys");
+  const [selectedHostel, setSelectedHostel] = useState("M");
+  const [selectedFloor, setSelectedFloor] = useState("");
+  const [selectedRoomType, setSelectedRoomType] = useState("");
+  const [selectedBlock, setSelectedBlock] = useState("");
+  const [onlyAc, setOnlyAc] = useState(false);
+  const [onlyAttached, setOnlyAttached] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [postedCode, setPostedCode] = useState("");
+  const [postedWhatsAppUrl, setPostedWhatsAppUrl] = useState("");
+  const [swapCheck, setSwapCheck] = useState<Listing | null>(null);
+  const [swapCodeInput, setSwapCodeInput] = useState("");
+  const [swapCodeError, setSwapCodeError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const activeGender = selectedGender;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadListings() {
+      try {
+        const response = await fetch("/api/listings", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = (await response.json()) as { listings: Listing[] };
+        if (!cancelled) {
+          setListings(data.listings);
+        }
+      } catch {
+        // Keep seeded client data if the API is unavailable during local development.
+      }
+    }
+
+    loadListings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filteredListings = useMemo(() => {
+    return listings.filter((listing) => {
+      const sameGender = genderForHostel(listing.hostel) === activeGender;
+      const hostelMatch = !selectedHostel || listing.hostel === selectedHostel;
+      const floorMatch = !selectedFloor || listing.floor === selectedFloor;
+      const typeMatch = !selectedRoomType || listing.roomType === selectedRoomType;
+      const blockMatch = !selectedBlock || listing.block === selectedBlock;
+      const acMatch = !onlyAc || listing.roomType.includes("AC");
+      const attachedMatch = !onlyAttached || listing.roomType.includes("Attached");
+      const text = `${listing.hostel} ${listing.block ?? ""} ${listing.room} ${listing.floor} ${listing.roomType} ${listing.wants.hostels.join(" ")} ${listing.wants.rooms.join(" ")}`.toLowerCase();
+      const searchMatch = !search || text.includes(search.toLowerCase());
+      return sameGender && hostelMatch && floorMatch && typeMatch && blockMatch && acMatch && attachedMatch && searchMatch;
+    });
+  }, [activeGender, listings, onlyAc, onlyAttached, search, selectedBlock, selectedFloor, selectedHostel, selectedRoomType]);
+
+  const stats = [
+    { label: "Active swap requests", value: listings.length * 38 + 124 },
+    { label: "Most wanted hostel", value: "M Block C" },
+    { label: "Recent swaps", value: "27 today" },
+  ];
+
+  function updateForm(next: Partial<typeof form>) {
+    setForm((current) => ({ ...current, ...next }));
+  }
+
+  function toggleArray(key: keyof Listing["wants"], value: string) {
+    setForm((current) => {
+      const currentValues = current.wants[key];
+      const nextValues = currentValues.includes(value)
+        ? currentValues.filter((item) => item !== value)
+        : [...currentValues, value];
+      const nextWants = { ...current.wants, [key]: nextValues };
+      if (key === "hostels") {
+        nextWants.blocks = nextValues.includes("M") ? current.wants.blocks : [];
+      }
+      return { ...current, wants: nextWants };
+    });
+  }
+
+  function addRoomTag() {
+    const value = roomTag.trim();
+    if (!value || form.wants.rooms.includes(value)) return;
+    setForm((current) => ({
+      ...current,
+      wants: {
+        ...current.wants,
+        rooms: [...current.wants.rooms.filter((room) => room !== anyRoomPreference), value],
+      },
+    }));
+    setRoomTag("");
+  }
+
+  function toggleAnyRoom() {
+    setForm((current) => ({
+      ...current,
+      wants: {
+        ...current.wants,
+        rooms: current.wants.rooms.includes(anyRoomPreference) ? [] : [anyRoomPreference],
+      },
+    }));
+    setRoomTag("");
+  }
+
+  async function submitListing(event: FormEvent) {
+    event.preventDefault();
+    setIsSubmitting(true);
+    const response = await fetch("/api/listings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+    setIsSubmitting(false);
+    if (!response.ok) return;
+
+    const result = (await response.json()) as {
+      listing: Listing;
+      swapCode: string;
+      whatsappUrl: string;
+    };
+    const listing = result.listing;
+    setListings((current) => [listing, ...current]);
+    setSelectedGender(genderForHostel(form.hostel));
+    setSelectedHostel(form.hostel);
+    setPostedCode(result.swapCode);
+    setPostedWhatsAppUrl(result.whatsappUrl);
+    setSuccess(true);
+    window.open(result.whatsappUrl, "_blank", "noopener,noreferrer");
+    setPostingStep(1);
+  }
+
+  async function confirmSwapped() {
+    if (!swapCheck) return;
+    const response = await fetch(`/api/listings/${swapCheck.id}/swap`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ swapCode: swapCodeInput }),
+    });
+    if (!response.ok) {
+      const data = (await response.json().catch(() => null)) as { message?: string } | null;
+      setSwapCodeError(data?.message ?? "That code does not match this listing.");
+      return;
+    }
+    setListings((current) => current.filter((listing) => listing.id !== swapCheck.id));
+    setSwapCheck(null);
+    setSwapCodeInput("");
+    setSwapCodeError("");
+  }
+
+  return (
+    <main className="min-h-screen overflow-hidden bg-[#060611] text-white">
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_20%_10%,rgba(76,201,240,0.18),transparent_30%),radial-gradient(circle_at_84%_0%,rgba(255,77,141,0.16),transparent_28%),linear-gradient(135deg,#060611_0%,#0c1024_48%,#101322_100%)]" />
+      <Navbar
+        search={search}
+        setSearch={setSearch}
+        onPost={() => setModalOpen(true)}
+      />
+      <Hero stats={stats} onPost={() => setModalOpen(true)} />
+      <section id="browse" className="mx-auto w-full max-w-7xl px-4 pb-24 pt-5 sm:px-6 lg:px-8">
+        <div className="mb-5 flex items-end justify-between gap-4">
+          <div>
+            <p className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3 py-1 text-xs font-semibold text-cyan-100">
+              <Zap className="h-3.5 w-3.5 text-cyan-300" />
+              {activeGender === "girls" ? "Girls hostel network" : "Boys hostel network"}
+            </p>
+            <h2 className="text-2xl font-black tracking-tight sm:text-4xl">Live swap board</h2>
+          </div>
+          <button
+            onClick={() => setModalOpen(true)}
+            className="hidden rounded-full bg-white px-5 py-3 text-sm font-black text-[#070816] shadow-[0_16px_45px_rgba(255,255,255,0.18)] transition hover:scale-105 sm:inline-flex"
+          >
+            Post Room
+          </button>
+        </div>
+
+        <div className="mb-4 grid grid-cols-2 gap-2 rounded-full border border-white/10 bg-white/7 p-1 sm:max-w-sm">
+          {(["boys", "girls"] as Gender[]).map((gender) => (
+            <button
+              key={gender}
+              onClick={() => {
+                const nextHostel = hostelsForGender(gender)[0];
+                setSelectedGender(gender);
+                setSelectedHostel(nextHostel);
+                setSelectedBlock("");
+                if (selectedRoomType && !roomTypesForHostel(nextHostel).includes(selectedRoomType)) {
+                  setSelectedRoomType("");
+                }
+              }}
+              className={`h-11 rounded-full text-sm font-black transition ${
+                activeGender === gender
+                  ? "bg-white text-[#070816] shadow-[0_12px_35px_rgba(255,255,255,0.16)]"
+                  : "text-white/58 hover:text-white"
+              }`}
+            >
+              {gender === "girls" ? "Girls Hostels" : "Boys Hostels"}
+            </button>
+          ))}
+        </div>
+
+        <FilterBar
+          activeGender={activeGender}
+          selectedHostel={selectedHostel}
+          setSelectedHostel={(value) => {
+            setSelectedHostel(value);
+            if (selectedRoomType && !roomTypesForHostel(value).includes(selectedRoomType)) {
+              setSelectedRoomType("");
+            }
+            if (value !== "M") {
+              setSelectedBlock("");
+            }
+          }}
+          selectedFloor={selectedFloor}
+          setSelectedFloor={setSelectedFloor}
+          selectedRoomType={selectedRoomType}
+          setSelectedRoomType={setSelectedRoomType}
+          selectedBlock={selectedBlock}
+          setSelectedBlock={setSelectedBlock}
+          onlyAc={onlyAc}
+          setOnlyAc={setOnlyAc}
+          onlyAttached={onlyAttached}
+          setOnlyAttached={setOnlyAttached}
+          search={search}
+          setSearch={setSearch}
+        />
+
+        <div className="mb-5 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+          {(activeGender === "girls" ? ["E", "G", "I", "N", "Q", "PG I", "PG II"] : ["M", "H", "A", "B", "C", "J", "L"]).map((hostel) => (
+            <button
+              key={hostel}
+              onClick={() => {
+                setSelectedHostel(hostel);
+                if (selectedRoomType && !roomTypesForHostel(hostel).includes(selectedRoomType)) {
+                  setSelectedRoomType("");
+                }
+                if (hostel !== "M") {
+                  setSelectedBlock("");
+                }
+              }}
+              className={`shrink-0 rounded-full border px-4 py-2 text-sm font-bold transition ${
+                selectedHostel === hostel
+                  ? "border-cyan-300/70 bg-cyan-300/15 text-cyan-100 shadow-[0_0_28px_rgba(34,211,238,0.22)]"
+                  : "border-white/10 bg-white/7 text-white/70 hover:border-white/25 hover:text-white"
+              }`}
+            >
+              Trending Hostel {hostel}
+            </button>
+          ))}
+        </div>
+
+        {filteredListings.length ? (
+          <motion.div layout className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <AnimatePresence>
+              {filteredListings.map((listing, index) => (
+                <ListingCard
+                  key={listing.id}
+                  listing={listing}
+                  index={index}
+                  onSwapped={() => {
+                    setSwapCheck(listing);
+                    setSwapCodeInput("");
+                    setSwapCodeError("");
+                  }}
+                />
+              ))}
+            </AnimatePresence>
+          </motion.div>
+        ) : (
+          <EmptyState onPost={() => setModalOpen(true)} />
+        )}
+      </section>
+
+      <button
+        onClick={() => setModalOpen(true)}
+        className="fixed bottom-5 left-1/2 z-30 inline-flex h-14 -translate-x-1/2 items-center gap-2 rounded-full bg-gradient-to-r from-cyan-300 via-blue-400 to-fuchsia-400 px-6 text-sm font-black text-[#050711] shadow-[0_18px_60px_rgba(56,189,248,0.35)] sm:hidden"
+      >
+        <Plus className="h-5 w-5" />
+        Post My Room
+      </button>
+
+      <AnimatePresence>
+        {modalOpen && (
+          <PostModal
+            form={form}
+            setForm={updateForm}
+            postingStep={postingStep}
+            setPostingStep={setPostingStep}
+            roomTag={roomTag}
+            setRoomTag={setRoomTag}
+            addRoomTag={addRoomTag}
+            toggleAnyRoom={toggleAnyRoom}
+            toggleArray={toggleArray}
+            submitListing={submitListing}
+            onClose={() => {
+              setModalOpen(false);
+              setSuccess(false);
+              setPostedCode("");
+              setPostedWhatsAppUrl("");
+              setForm(blankListing);
+            }}
+            success={success}
+            postedCode={postedCode}
+            postedWhatsAppUrl={postedWhatsAppUrl}
+            isSubmitting={isSubmitting}
+            onSuccessDone={() => {
+              setModalOpen(false);
+              setSuccess(false);
+              setPostedCode("");
+              setPostedWhatsAppUrl("");
+              setForm(blankListing);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {swapCheck && (
+          <SwapCodeModal
+            listing={swapCheck}
+            code={swapCodeInput}
+            error={swapCodeError}
+            setCode={(value) => {
+              setSwapCodeInput(value.toUpperCase());
+              setSwapCodeError("");
+            }}
+            onConfirm={confirmSwapped}
+            onClose={() => {
+              setSwapCheck(null);
+              setSwapCodeInput("");
+              setSwapCodeError("");
+            }}
+          />
+        )}
+      </AnimatePresence>
+    </main>
+  );
+}
+
+function Navbar({
+  search,
+  setSearch,
+  onPost,
+}: {
+  search: string;
+  setSearch: (value: string) => void;
+  onPost: () => void;
+}) {
+  return (
+    <nav className="fixed left-0 right-0 top-0 z-40 border-b border-white/10 bg-[#060611]/72 backdrop-blur-2xl">
+      <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
+        <a href="#" className="flex items-center gap-2">
+          <span className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-cyan-300 via-blue-500 to-fuchsia-500 shadow-[0_0_35px_rgba(59,130,246,0.42)]">
+            <Sparkles className="h-5 w-5 text-white" />
+          </span>
+          <span className="text-lg font-black tracking-tight">SwapSync</span>
+        </a>
+        <a href="#browse" className="ml-auto hidden text-sm font-bold text-white/72 transition hover:text-white md:block">
+          Browse Swaps
+        </a>
+        <label className="relative hidden min-w-72 items-center md:flex">
+          <Search className="pointer-events-none absolute left-4 h-4 w-4 text-white/45" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search room, hostel, floor"
+            className="h-11 w-full rounded-full border border-white/10 bg-white/8 pl-11 pr-4 text-sm font-semibold outline-none transition placeholder:text-white/35 focus:border-cyan-300/60 focus:bg-white/12"
+          />
+        </label>
+        <button
+          onClick={onPost}
+          className="hidden rounded-full bg-white px-5 py-3 text-sm font-black text-[#070816] transition hover:scale-105 md:inline-flex"
+        >
+          Post Room
+        </button>
+      </div>
+    </nav>
+  );
+}
+
+function Hero({ stats, onPost }: { stats: { label: string; value: string | number }[]; onPost: () => void }) {
+  const floating = [
+    { hostel: "M-C", room: "512", type: "2S AC", className: "left-[4%] top-28 hidden md:block", rotate: "-6deg" },
+    { hostel: "PG I", room: "701", type: "2S AC", className: "right-[5%] top-24 hidden sm:block", rotate: "5deg" },
+    { hostel: "G", room: "208", type: "1S AC", className: "left-[14%] bottom-12 hidden md:block", rotate: "4deg" },
+    { hostel: "H", room: "431", type: "3S", className: "right-[16%] bottom-10 hidden md:block", rotate: "-4deg" },
+  ];
+
+  return (
+    <section className="relative px-4 pb-10 pt-28 sm:px-6 lg:px-8">
+      <div className="absolute inset-0 -z-10 bg-[linear-gradient(115deg,rgba(59,130,246,0.16),rgba(217,70,239,0.10),rgba(34,211,238,0.12))] animated-gradient" />
+      {floating.map((card, index) => (
+        <div
+          key={card.hostel}
+          className={`float-card glass absolute w-32 rounded-[1.7rem] p-4 opacity-80 ${card.className}`}
+          style={{ "--rotate": card.rotate, animationDelay: `${index * 0.6}s` } as React.CSSProperties}
+        >
+          <p className="text-xs font-black text-cyan-200">Hostel {card.hostel}</p>
+          <p className="mt-2 text-3xl font-black">{card.room}</p>
+          <p className="mt-1 text-xs font-bold text-white/55">{card.type}</p>
+        </div>
+      ))}
+      <div className="mx-auto max-w-4xl text-center">
+        <motion.p
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-100 shadow-[0_0_35px_rgba(34,211,238,0.14)]"
+        >
+          Find your perfect hostel room swap instantly.
+        </motion.p>
+        <motion.h1
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.08 }}
+          className="text-balance text-4xl font-black tracking-tight sm:text-7xl xl:text-8xl"
+        >
+          Didn&apos;t get the hostel room you wanted?
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.16 }}
+          className="mx-auto mt-5 max-w-2xl text-pretty text-lg font-semibold leading-8 text-white/68 sm:text-2xl"
+        >
+          Swap rooms with other students instantly.
+        </motion.p>
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.24 }}
+          className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"
+        >
+          <a
+            href="#browse"
+            className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-white px-7 text-sm font-black text-[#070816] shadow-[0_22px_70px_rgba(255,255,255,0.18)] transition hover:scale-105"
+          >
+            Find Swap
+            <ArrowRight className="h-4 w-4" />
+          </a>
+          <button
+            onClick={onPost}
+            className="inline-flex h-14 items-center justify-center rounded-full border border-white/14 bg-white/10 px-7 text-sm font-black text-white backdrop-blur-xl transition hover:scale-105 hover:bg-white/16"
+          >
+            Post My Room
+          </button>
+        </motion.div>
+      </div>
+      <div className="mx-auto mt-10 grid max-w-4xl gap-3 sm:grid-cols-3">
+        {stats.map((stat, index) => (
+          <motion.div
+            key={stat.label}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 + index * 0.08 }}
+            className="glass rounded-[1.5rem] p-5 text-left"
+          >
+            <p className="text-2xl font-black">{stat.value}</p>
+            <p className="mt-1 text-sm font-semibold text-white/52">{stat.label}</p>
+          </motion.div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FilterBar(props: {
+  activeGender: Gender;
+  selectedHostel: string;
+  setSelectedHostel: (value: string) => void;
+  selectedFloor: string;
+  setSelectedFloor: (value: string) => void;
+  selectedRoomType: string;
+  setSelectedRoomType: (value: string) => void;
+  selectedBlock: string;
+  setSelectedBlock: (value: string) => void;
+  onlyAc: boolean;
+  setOnlyAc: (value: boolean) => void;
+  onlyAttached: boolean;
+  setOnlyAttached: (value: boolean) => void;
+  search: string;
+  setSearch: (value: string) => void;
+}) {
+  const genderHostels = hostelsForGender(props.activeGender);
+  return (
+    <div className="sticky top-16 z-20 mb-5 rounded-[1.6rem] border border-white/10 bg-[#090a18]/80 p-3 shadow-[0_20px_80px_rgba(0,0,0,0.3)] backdrop-blur-2xl">
+      <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
+        <FilterSelect value={props.selectedHostel} onChange={props.setSelectedHostel} options={genderHostels} label="Hostel" />
+        <FilterSelect value={props.selectedFloor} onChange={props.setSelectedFloor} options={floors} label="Floor" allowAny />
+        <FilterSelect value={props.selectedRoomType} onChange={props.setSelectedRoomType} options={roomTypesForHostel(props.selectedHostel)} label="Type" allowAny />
+        {props.selectedHostel === "M" && (
+          <FilterSelect value={props.selectedBlock} onChange={props.setSelectedBlock} options={blocks} label="Block" allowAny />
+        )}
+        <ToggleChip label="AC" active={props.onlyAc} onClick={() => props.setOnlyAc(!props.onlyAc)} />
+        <ToggleChip label="Attached" active={props.onlyAttached} onClick={() => props.setOnlyAttached(!props.onlyAttached)} />
+      </div>
+      <label className="relative mt-3 flex md:hidden">
+        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/45" />
+        <input
+          value={props.search}
+          onChange={(event) => props.setSearch(event.target.value)}
+          placeholder="Exact room search"
+          className="h-12 w-full rounded-full border border-white/10 bg-white/8 pl-11 pr-4 text-sm font-semibold outline-none placeholder:text-white/35 focus:border-cyan-300/60"
+        />
+      </label>
+    </div>
+  );
+}
+
+function FilterSelect({
+  value,
+  onChange,
+  options,
+  label,
+  allowAny,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  label: string;
+  allowAny?: boolean;
+}) {
+  return (
+    <label className="relative shrink-0">
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-11 appearance-none rounded-full border border-white/10 bg-white/9 py-0 pl-4 pr-10 text-sm font-bold text-white outline-none transition hover:border-white/20 focus:border-cyan-300/60"
+      >
+        {allowAny && <option value="">Any {label}</option>}
+        {options.map((option) => (
+          <option key={option} value={option} className="bg-[#101322]">
+            {label} {option}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/55" />
+    </label>
+  );
+}
+
+function ToggleChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-black transition ${
+        active
+          ? "border-fuchsia-300/60 bg-fuchsia-300/15 text-fuchsia-100 shadow-[0_0_25px_rgba(217,70,239,0.2)]"
+          : "border-white/10 bg-white/8 text-white/72 hover:border-white/25"
+      }`}
+    >
+      <SlidersHorizontal className="h-4 w-4" />
+      {label}
+    </button>
+  );
+}
+
+function ListingCard({
+  listing,
+  index,
+  onSwapped,
+}: {
+  listing: Listing;
+  index: number;
+  onSwapped: () => void;
+}) {
+  const badges = [
+    listing.roomType.includes("AC") ? "AC" : null,
+    listing.roomType.includes("Attached") ? "Attached" : null,
+    listing.roomType.split(" ")[0],
+    `${listing.floor} Floor`,
+  ].filter(Boolean);
+  const perfect = listing.wants.hostels.includes(listing.hostel) || listing.wants.rooms.includes(listing.room);
+  const whatsappUrl = `https://wa.me/${listing.whatsapp}?text=${encodeURIComponent(`Hey, I saw your SwapSync listing for Hostel ${listing.hostel} Room ${listing.room}. Want to discuss a room swap?`)}`;
+
+  return (
+    <motion.article
+      layout
+      initial={{ opacity: 0, y: 24, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 16, scale: 0.96 }}
+      transition={{ delay: index * 0.04 }}
+      className="group glass relative overflow-hidden rounded-[1.8rem] p-5 transition duration-300 hover:-translate-y-1 hover:border-cyan-300/35 hover:shadow-[0_24px_90px_rgba(34,211,238,0.16)]"
+    >
+      <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-cyan-200/60 to-transparent opacity-0 transition group-hover:opacity-100" />
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-black text-cyan-200">
+            Hostel {listing.hostel}
+            {listing.block ? ` - Block ${listing.block}` : ""}
+          </p>
+          <p className="mt-3 text-5xl font-black tracking-tight">{listing.room}</p>
+        </div>
+        {perfect && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-orange-300/40 bg-orange-300/15 px-3 py-1.5 text-[0.65rem] font-black text-orange-100 shadow-[0_0_26px_rgba(251,146,60,0.26)]">
+            <Flame className="h-3.5 w-3.5" />
+            PERFECT MATCH
+          </span>
+        )}
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <InfoPill label="Floor" value={listing.floor} />
+        <InfoPill label="Room Type" value={listing.roomType} />
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {badges.map((badge) => (
+          <span key={badge} className="rounded-full bg-white/9 px-3 py-1 text-xs font-black text-white/72">
+            {badge}
+          </span>
+        ))}
+      </div>
+      <div className="mt-5 rounded-[1.25rem] border border-white/8 bg-black/16 p-4">
+        <p className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-white/42">Looking For</p>
+        <div className="flex flex-wrap gap-2">
+          {[
+            ...listing.wants.hostels.map((item) => `Hostel ${item}`),
+            ...listing.wants.blocks.map((item) => `Block ${item}`),
+            ...listing.wants.rooms.map((item) => (item === anyRoomPreference ? item : `Room ${item}`)),
+            ...listing.wants.floors,
+          ].map((item) => (
+            <span key={item} className="rounded-full bg-cyan-300/10 px-3 py-1 text-xs font-bold text-cyan-100">
+              {item}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="mt-5 flex items-center gap-3">
+        <a
+          href={whatsappUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#25D366] text-sm font-black text-[#04130a] transition hover:scale-[1.02]"
+        >
+          <MessageCircle className="h-4 w-4" />
+          WhatsApp
+        </a>
+        <button
+          type="button"
+          onClick={onSwapped}
+          className="h-12 rounded-full border border-white/10 bg-white/8 px-4 text-xs font-black text-white/72 transition hover:border-emerald-300/45 hover:bg-emerald-300/12 hover:text-emerald-100"
+        >
+          Mark Swapped
+        </button>
+        <span className="text-xs font-bold text-white/42">{listing.posted}</span>
+      </div>
+    </motion.article>
+  );
+}
+
+function SwapCodeModal({
+  listing,
+  code,
+  error,
+  setCode,
+  onConfirm,
+  onClose,
+}: {
+  listing: Listing;
+  code: string;
+  error: string;
+  setCode: (value: string) => void;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[60] grid place-items-center bg-black/64 p-4 backdrop-blur-xl"
+    >
+      <motion.div
+        initial={{ y: 32, opacity: 0, scale: 0.96 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 32, opacity: 0, scale: 0.96 }}
+        className="glass w-full max-w-md rounded-[2rem] p-6"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-black text-emerald-200">Mark as swapped</p>
+            <h3 className="mt-2 text-2xl font-black tracking-tight">Enter your swap code</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/10 text-white/75 transition hover:bg-white/16 hover:text-white"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <p className="mt-4 text-sm font-semibold leading-6 text-white/58">
+          Use the unique code sent to WhatsApp after posting Hostel {listing.hostel}
+          {listing.block ? ` Block ${listing.block}` : ""}, Room {listing.room}.
+        </p>
+        <input
+          value={code}
+          onChange={(event) => setCode(event.target.value)}
+          placeholder="SYNC-M512-ABCDE"
+          className="mt-5 h-13 w-full rounded-2xl border border-white/10 bg-white/8 px-4 text-sm font-black uppercase tracking-wide outline-none placeholder:text-white/28 focus:border-emerald-300/60"
+        />
+        {error && <p className="mt-3 text-sm font-bold text-red-300">{error}</p>}
+        <div className="mt-6 flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-12 flex-1 rounded-full border border-white/10 bg-white/8 text-sm font-black text-white/70 transition hover:bg-white/14 hover:text-white"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="h-12 flex-1 rounded-full bg-emerald-300 text-sm font-black text-[#06130b] transition hover:scale-[1.02]"
+          >
+            Remove Post
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function InfoPill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-white/7 p-3">
+      <p className="text-[0.68rem] font-black uppercase tracking-[0.14em] text-white/36">{label}</p>
+      <p className="mt-1 text-sm font-black text-white">{value}</p>
+    </div>
+  );
+}
+
+function EmptyState({ onPost }: { onPost: () => void }) {
+  return (
+    <div className="glass grid min-h-96 place-items-center rounded-[2rem] p-8 text-center">
+      <div>
+        <div className="mx-auto grid h-24 w-24 place-items-center rounded-[2rem] bg-gradient-to-br from-cyan-300/20 via-blue-400/15 to-fuchsia-400/20">
+          <BedDouble className="h-11 w-11 text-cyan-100" />
+        </div>
+        <h3 className="mt-6 text-2xl font-black">No swaps found</h3>
+        <p className="mx-auto mt-2 max-w-sm text-sm font-semibold leading-6 text-white/55">
+          Try another hostel network or post your room to pull matching students into the feed.
+        </p>
+        <button
+          onClick={onPost}
+          className="mt-6 rounded-full bg-white px-6 py-3 text-sm font-black text-[#070816] transition hover:scale-105"
+        >
+          Post My Room
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PostModal({
+  form,
+  setForm,
+  postingStep,
+  setPostingStep,
+  roomTag,
+  setRoomTag,
+  addRoomTag,
+  toggleAnyRoom,
+  toggleArray,
+  submitListing,
+  onClose,
+  success,
+  postedCode,
+  postedWhatsAppUrl,
+  isSubmitting,
+  onSuccessDone,
+}: {
+  form: Omit<Listing, "id" | "posted">;
+  setForm: (next: Partial<Omit<Listing, "id" | "posted">>) => void;
+  postingStep: number;
+  setPostingStep: (step: number) => void;
+  roomTag: string;
+  setRoomTag: (value: string) => void;
+  addRoomTag: () => void;
+  toggleAnyRoom: () => void;
+  toggleArray: (key: keyof Listing["wants"], value: string) => void;
+  submitListing: (event: FormEvent) => void;
+  onClose: () => void;
+  success: boolean;
+  postedCode: string;
+  postedWhatsAppUrl: string;
+  isSubmitting: boolean;
+  onSuccessDone: () => void;
+}) {
+  const currentGender = genderForHostel(form.hostel);
+  const allowedHostels = hostelsForGender(currentGender);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 grid place-items-end bg-black/64 p-3 backdrop-blur-xl sm:place-items-center"
+    >
+      <motion.form
+        onSubmit={submitListing}
+        initial={{ y: 80, opacity: 0, scale: 0.96 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 80, opacity: 0, scale: 0.96 }}
+        className="glass relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] p-5 sm:p-7"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-5 top-5 grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white/75 transition hover:bg-white/16 hover:text-white"
+          aria-label="Close"
+        >
+          <X className="h-5 w-5" />
+        </button>
+        <AnimatePresence>
+          {success && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="absolute inset-0 z-10 grid place-items-center rounded-[2rem] bg-[#080914]/90 backdrop-blur-xl"
+            >
+              <div className="text-center">
+                <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-emerald-300 text-[#06130b]">
+                  <Check className="h-10 w-10" />
+                </div>
+                <p className="mt-5 text-3xl font-black">Posted instantly</p>
+                <p className="mt-2 text-sm font-bold text-white/55">
+                  Your listing is live. Save this code to mark it swapped later.
+                </p>
+                <div className="mx-auto mt-5 max-w-xs rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-4 py-3">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-200">Swap Code</p>
+                  <p className="mt-1 text-2xl font-black tracking-wide text-white">{postedCode}</p>
+                </div>
+                <div className="mx-auto mt-5 grid max-w-xs gap-3">
+                  <a
+                    href={postedWhatsAppUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-12 items-center justify-center rounded-full bg-[#25D366] text-sm font-black text-[#04130a] transition hover:scale-[1.02]"
+                  >
+                    Open WhatsApp with Code
+                  </a>
+                  <button
+                    type="button"
+                    onClick={onSuccessDone}
+                    className="h-12 rounded-full border border-white/10 bg-white/8 text-sm font-black text-white/75 transition hover:bg-white/14 hover:text-white"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <div className="pr-12">
+          <p className="text-sm font-black text-cyan-200">Post My Room</p>
+          <h2 className="mt-2 text-3xl font-black tracking-tight">Create a swap listing</h2>
+        </div>
+        <div className="mt-6 grid grid-cols-2 gap-2 rounded-full bg-white/8 p-1">
+          {["Current room", "What you want"].map((step, index) => (
+            <button
+              key={step}
+              type="button"
+              onClick={() => setPostingStep(index + 1)}
+              className={`h-11 rounded-full text-sm font-black transition ${
+                postingStep === index + 1 ? "bg-white text-[#070816]" : "text-white/55 hover:text-white"
+              }`}
+            >
+              {step}
+            </button>
+          ))}
+        </div>
+        {postingStep === 1 ? (
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <FormSelect
+              label="Hostel"
+              value={form.hostel}
+              onChange={(value) =>
+                setForm({
+                  hostel: value,
+                  block: value === "M" ? form.block || "A" : undefined,
+                  roomType: roomTypesForHostel(value).includes(form.roomType)
+                    ? form.roomType
+                    : roomTypesForHostel(value)[0],
+                  wants: {
+                    ...form.wants,
+                    hostels: hostelsForGender(genderForHostel(value)).slice(0, 1),
+                    blocks: value === "M" ? form.wants.blocks : [],
+                  },
+                })
+              }
+              options={hostels}
+            />
+            {form.hostel === "M" && (
+              <FormSelect label="Block" value={form.block || "A"} onChange={(value) => setForm({ block: value })} options={blocks} />
+            )}
+            <FormInput label="Room Number" value={form.room} onChange={(value) => setForm({ room: value })} placeholder="512" />
+            <FormSelect label="Floor" value={form.floor} onChange={(value) => setForm({ floor: value })} options={floors} />
+            <div className="sm:col-span-2">
+              <FormSelect label="Room Type" value={form.roomType} onChange={(value) => setForm({ roomType: value })} options={roomTypesForHostel(form.hostel)} />
+            </div>
+            <button
+              type="button"
+              disabled={!form.room}
+              onClick={() => setPostingStep(2)}
+              className="sm:col-span-2 mt-2 h-13 rounded-full bg-white text-sm font-black text-[#070816] transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              Continue
+            </button>
+          </div>
+        ) : (
+          <div className="mt-6 space-y-5">
+            <div>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-black text-white/70">Exact Room Numbers</p>
+                <Tag
+                  label="Any Room"
+                  active={form.wants.rooms.includes(anyRoomPreference)}
+                  onClick={toggleAnyRoom}
+                />
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={roomTag}
+                  onChange={(event) => setRoomTag(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addRoomTag();
+                    }
+                  }}
+                  placeholder="346"
+                  disabled={form.wants.rooms.includes(anyRoomPreference)}
+                  className="h-12 min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/8 px-4 text-sm font-bold outline-none focus:border-cyan-300/60"
+                />
+                <button
+                  type="button"
+                  onClick={addRoomTag}
+                  disabled={form.wants.rooms.includes(anyRoomPreference)}
+                  className="grid h-12 w-12 place-items-center rounded-2xl bg-cyan-300 text-[#061018] transition disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <Plus className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {form.wants.rooms.filter((room) => room !== anyRoomPreference).map((room) => (
+                  <Tag key={room} label={room} active onClick={() => toggleArray("rooms", room)} />
+                ))}
+              </div>
+            </div>
+            <ChipGroup title="Preferred Hostel" values={allowedHostels} selected={form.wants.hostels} onToggle={(value) => toggleArray("hostels", value)} prefix="Hostel " />
+            {form.wants.hostels.includes("M") && (
+              <ChipGroup title="Preferred Blocks" values={blocks} selected={form.wants.blocks} onToggle={(value) => toggleArray("blocks", value)} prefix="Block " />
+            )}
+            <ChipGroup title="Preferred Floors" values={floors} selected={form.wants.floors} onToggle={(value) => toggleArray("floors", value)} />
+            <FormInput label="WhatsApp Number" value={form.whatsapp} onChange={(value) => setForm({ whatsapp: value })} placeholder="91XXXXXXXXXX" />
+            <button
+              type="submit"
+              disabled={isSubmitting || !form.whatsapp || !form.wants.hostels.length}
+              className="h-14 w-full rounded-full bg-gradient-to-r from-cyan-300 via-blue-400 to-fuchsia-400 text-sm font-black text-[#050711] shadow-[0_20px_70px_rgba(56,189,248,0.28)] transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              {isSubmitting ? "Publishing..." : "Publish Swap Request"}
+            </button>
+          </div>
+        )}
+      </motion.form>
+    </motion.div>
+  );
+}
+
+function FormSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-black text-white/70">{label}</span>
+      <span className="relative block">
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-13 w-full appearance-none rounded-2xl border border-white/10 bg-white/8 px-4 pr-10 text-sm font-bold outline-none focus:border-cyan-300/60"
+        >
+          {options.map((option) => (
+            <option key={option} value={option} className="bg-[#101322]">
+              {option}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/55" />
+      </span>
+    </label>
+  );
+}
+
+function FormInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-black text-white/70">{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="h-13 w-full rounded-2xl border border-white/10 bg-white/8 px-4 text-sm font-bold outline-none placeholder:text-white/35 focus:border-cyan-300/60"
+      />
+    </label>
+  );
+}
+
+function ChipGroup({
+  title,
+  values,
+  selected,
+  onToggle,
+  prefix = "",
+}: {
+  title: string;
+  values: string[];
+  selected: string[];
+  onToggle: (value: string) => void;
+  prefix?: string;
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-sm font-black text-white/70">{title}</p>
+      <div className="flex flex-wrap gap-2">
+        {values.map((value) => (
+          <Tag key={value} label={`${prefix}${value}`} active={selected.includes(value)} onClick={() => onToggle(value)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Tag({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-4 py-2 text-sm font-black transition ${
+        active
+          ? "border-cyan-300/60 bg-cyan-300/15 text-cyan-100"
+          : "border-white/10 bg-white/8 text-white/58 hover:border-white/25 hover:text-white"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
