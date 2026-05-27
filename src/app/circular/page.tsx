@@ -36,17 +36,49 @@ type Listing = {
 type SwapChain = [Listing | any, Listing, Listing];
 
 const hostels = [
-  "A", "B", "C", "D", "E", "G", "H", "I", "J", "K", "L", "M", "N", "O", "Q", "PG I", "PG II"
+  "A", "B", "C", "D", "E", "G", "H", "I", "J", "K", "L", "M", "N", "O", "Q", "PG I", "PG II", "FRG", "FRF"
 ];
 const blocks = ["A", "B", "C", "D", "E", "F"];
 const floors = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
-const roomTypes = [
-  "2S AC Attached Shared by 2 Rooms (2S WST)",
-  "1S AC Attached Shared",
+
+const allRoomTypes = [
   "1S Non-AC",
-  "2S AC Attached (2WAT)",
+  "1S AC",
+  "1S AC Attached Shared",
+  "1S AC Attached",
   "2S Non-AC",
+  "2S AC",
+  "2S AC Attached (2WAT)",
+  "2S AC Attached Shared by 2 Rooms (2S WST)",
+  "3S Non-AC",
+  "3S AC",
+  "4S Non-AC",
+  "4S AC",
 ];
+
+const roomTypeAvailability: Record<string, string[]> = {
+  A: ["2S AC Attached Shared by 2 Rooms (2S WST)"],
+  B: ["1S AC", "2S AC"],
+  C: ["2S AC", "3S AC"],
+  D: ["2S AC Attached Shared by 2 Rooms (2S WST)"],
+  E: ["1S AC", "2S AC", "3S AC", "4S AC"],
+  G: ["1S AC", "3S AC", "4S AC"],
+  H: ["2S Non-AC", "2S AC", "3S Non-AC", "3S AC", "4S Non-AC", "4S AC"],
+  I: ["1S Non-AC", "1S AC", "2S AC", "3S Non-AC", "3S AC"],
+  J: ["1S Non-AC", "1S AC", "2S Non-AC", "2S AC", "3S Non-AC", "4S Non-AC"],
+  K: ["2S Non-AC", "2S AC"],
+  L: ["2S AC"],
+  M: ["1S AC Attached Shared", "1S AC Attached", "2S AC Attached (2WAT)", "2S AC Attached Shared by 2 Rooms (2S WST)"],
+  N: ["1S AC Attached Shared", "1S AC Attached", "2S AC Attached Shared by 2 Rooms (2S WST)"],
+  O: ["2S AC Attached Shared by 2 Rooms (2S WST)"],
+  "PG I": ["2S AC", "2S AC Attached Shared by 2 Rooms (2S WST)"],
+  "PG II": ["2S AC", "2S AC Attached Shared by 2 Rooms (2S WST)"],
+  Q: ["2S AC Attached Shared by 2 Rooms (2S WST)"],
+  FRG: ["3S Non-AC", "3S AC"],
+  FRF: ["3S Non-AC", "3S AC"],
+};
+
+const roomTypesForHostel = (hostel: string) => roomTypeAvailability[hostel] ?? allRoomTypes;
 
 export default function CircularSwapsPage() {
   const [listings, setListings] = useState<Listing[]>([]);
@@ -57,7 +89,7 @@ export default function CircularSwapsPage() {
   const [myBlock, setMyBlock] = useState("");
   const [myRoom, setMyRoom] = useState("");
   const [myFloor, setMyFloor] = useState("1st");
-  const [myRoomType, setMyRoomType] = useState(roomTypes[0]);
+  const [myRoomType, setMyRoomType] = useState("2S AC Attached Shared by 2 Rooms (2S WST)");
 
   // Form states for "Desired Room"
   const [wantsHostels, setWantsHostels] = useState<string[]>(["A"]);
@@ -137,13 +169,14 @@ export default function CircularSwapsPage() {
       return true;
     };
 
-    // Find all B that match User's wants
-    const possibleB = listings.filter((b) => matchesPref(b, userListing.wants));
+    // Find all B that match User's wants and have the SAME roomType
+    const possibleB = listings.filter((b) => b.roomType === userListing.roomType && matchesPref(b, userListing.wants));
 
     for (const b of possibleB) {
-      // Find all C that match B's wants
+      // Find all C that match B's wants and have the SAME roomType
       const possibleC = listings.filter((c) => {
         if (c.id === b.id) return false;
+        if (c.roomType !== b.roomType) return false;
         return matchesPref(c, b.wants);
       });
 
@@ -234,8 +267,12 @@ export default function CircularSwapsPage() {
                 <select
                   value={myHostel}
                   onChange={(e) => {
-                    setMyHostel(e.target.value);
-                    if (e.target.value !== "M") setMyBlock("");
+                    const selected = e.target.value;
+                    setMyHostel(selected);
+                    if (selected !== "M") setMyBlock("");
+                    
+                    const availableTypes = roomTypesForHostel(selected);
+                    setMyRoomType(availableTypes[0] ?? "");
                   }}
                   className="h-11 rounded-xl border border-white/10 bg-white/7 px-3 text-sm font-semibold text-white outline-none"
                 >
@@ -293,9 +330,9 @@ export default function CircularSwapsPage() {
               <select
                 value={myRoomType}
                 onChange={(e) => setMyRoomType(e.target.value)}
-                className="h-11 rounded-xl border border-white/10 bg-white/7 px-3 text-sm font-semibold text-white outline-none"
+                className="h-11 rounded-xl border border-white/10 bg-white/7 px-3 text-sm font-semibold text-white outline-none text-left"
               >
-                {roomTypes.map((rt) => (
+                {roomTypesForHostel(myHostel).map((rt) => (
                   <option key={rt} value={rt} className="bg-[#0b0c22] text-white">{rt}</option>
                 ))}
               </select>
@@ -477,6 +514,7 @@ export default function CircularSwapsPage() {
                               <p className="text-[0.65rem] font-bold text-cyan-300 uppercase">Your Room (A)</p>
                               <p className="text-2xl font-black mt-1">Room {chain[0].room}</p>
                               <p className="text-xs text-white/55 mt-0.5">Hostel {chain[0].hostel}</p>
+                              <p className="text-[0.65rem] text-cyan-300/70 mt-1 font-semibold">{chain[0].roomType}</p>
                             </div>
                             <p className="text-xs text-white/40 mt-3 italic border-t border-white/5 pt-2">
                               Wants Room {chain[1].room}
@@ -489,6 +527,7 @@ export default function CircularSwapsPage() {
                               <p className="text-[0.65rem] font-bold text-white/50 uppercase">Student (B)</p>
                               <p className="text-2xl font-black mt-1">Room {chain[1].room}</p>
                               <p className="text-xs text-white/55 mt-0.5">Hostel {chain[1].hostel}</p>
+                              <p className="text-[0.65rem] text-white/40 mt-1 font-semibold">{chain[1].roomType}</p>
                             </div>
                             <div className="mt-3 border-t border-white/5 pt-2 flex items-center justify-between">
                               <span className="text-xs text-white/40 italic">Wants Room {chain[2].room}</span>
@@ -509,6 +548,7 @@ export default function CircularSwapsPage() {
                               <p className="text-[0.65rem] font-bold text-white/50 uppercase">Student (C)</p>
                               <p className="text-2xl font-black mt-1">Room {chain[2].room}</p>
                               <p className="text-xs text-white/55 mt-0.5">Hostel {chain[2].hostel}</p>
+                              <p className="text-[0.65rem] text-white/40 mt-1 font-semibold">{chain[2].roomType}</p>
                             </div>
                             <div className="mt-3 border-t border-white/5 pt-2 flex items-center justify-between">
                               <span className="text-xs text-white/40 italic">Wants Your Room</span>
