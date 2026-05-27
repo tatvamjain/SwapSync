@@ -1,23 +1,66 @@
 # SwapSync
 
-Hostel room swap board built with Next.js and Supabase.
+### Hostel swaps, simplified.
 
-## Supabase setup
+SwapSync is a modern hostel room swapping platform built for students during hostel allotment season.
 
-1. Create a Supabase project.
-2. Open the Supabase SQL editor and run `supabase/schema.sql`.
-3. Copy `.env.example` to `.env.local` for local development.
-4. Fill in:
-   - `SUPABASE_URL`: your project URL.
-   - `SUPABASE_SERVICE_ROLE_KEY`: your service role key from Supabase project settings.
+Instead of scrolling endlessly through WhatsApp groups, students can:
+- post their allotted room
+- search for preferred rooms
+- find compatible swaps
+- discover circular swap opportunities
+- connect instantly through WhatsApp
 
-The service role key is only used inside server-side API routes. Do not expose it with a `NEXT_PUBLIC_` prefix.
+🌐 Live Website: https://swapsync.vercel.app/
 
-## Vercel deployment
+---
 
-Add the same environment variables in Vercel:
+## ✨ Features
 
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- 🔍 Search by hostel, room, floor, or block
+- 🏠 Post room swap requests
+- 🔄 3-way circular swap detection
+- 🔎 “Who wants your room?” reverse search
+- 🧩 Hostel M block support
+- 👥 Separate boys/girls hostel networks
+- 📱 Fully mobile responsive
+- 🌙 Modern dark UI
 
-Then deploy normally with Vercel's Next.js preset.
+---
+
+## 🛠 Tech Stack
+
+- Next.js
+- TypeScript
+- Tailwind CSS
+- Framer Motion
+- Supabase
+- Vercel
+
+---
+
+## 🚀 Run Locally
+
+```bash
+npm install
+npm run dev
+```
+
+Open:
+```bash
+http://localhost:3000
+```
+
+---
+
+## 👨‍💻 Contributors
+
+### Anjani Agarwal
+Frontend • Product • UI/UX  
+🔗 https://www.linkedin.com/in/anjani-ag24
+
+### Tatvam Jain
+Backend • Logic • Systems  
+🔗 https://www.linkedin.com/in/tatvam-jain-41987b217/
+
+---
