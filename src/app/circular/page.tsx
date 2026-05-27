@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  ArrowDown,
   ArrowLeft,
   ArrowRight,
   MessageCircle,
@@ -239,29 +240,29 @@ export default function CircularSwapsPage() {
             <ArrowLeft className="h-4 w-4" /> Back to Home
           </Link>
           <span className="ml-auto text-sm font-black text-cyan-200">
-            🔄 Circular Swaps Tool
+            🔄 Circular Swaps <span className="hidden sm:inline">Tool</span>
           </span>
         </div>
       </nav>
 
       <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-black tracking-tight sm:text-5xl bg-gradient-to-r from-cyan-300 via-blue-400 to-fuchsia-400 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-black tracking-tight sm:text-4xl md:text-5xl bg-gradient-to-r from-cyan-300 via-blue-400 to-fuchsia-400 bg-clip-text text-transparent">
             Find Circular Room Swaps
           </h1>
-          <p className="mt-3 text-base text-white/60">
+          <p className="mt-3 text-sm sm:text-base text-white/60">
             A 3-way circular swap allows you to get your desired room even when direct swaps are not available.
           </p>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
           {/* Step 1: Your Room */}
-          <div className="glass rounded-[2rem] p-6 flex flex-col gap-4 border border-white/10">
+          <div className="glass rounded-[2rem] p-5 sm:p-6 flex flex-col gap-4 border border-white/10">
             <h2 className="text-lg font-black text-cyan-100 flex items-center gap-2">
               <span>🏠</span> 1. Enter Your Current Room
             </h2>
             
-            <div className="grid grid-cols-2 gap-3">
+            <div className={`grid gap-3 ${myHostel === "M" ? "grid-cols-2" : "grid-cols-1"}`}>
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-black text-white/50">Hostel</label>
                 <select
@@ -340,7 +341,7 @@ export default function CircularSwapsPage() {
           </div>
 
           {/* Step 2: Desired Room */}
-          <div className="glass rounded-[2rem] p-6 flex flex-col gap-4 border border-white/10">
+          <div className="glass rounded-[2rem] p-5 sm:p-6 flex flex-col gap-4 border border-white/10">
             <h2 className="text-lg font-black text-fuchsia-200 flex items-center gap-2">
               <span>🎯</span> 2. Enter Your Desired Room
             </h2>
@@ -407,13 +408,13 @@ export default function CircularSwapsPage() {
                   <button
                     key={h}
                     onClick={() => toggleArray(wantsHostels, setWantsHostels, h)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition ${
+                    className={`h-9 min-w-9 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center border ${
                       wantsHostels.includes(h)
-                        ? "bg-fuchsia-500/25 border border-fuchsia-400/50 text-fuchsia-200"
+                        ? "bg-fuchsia-500/25 border-fuchsia-400/50 text-fuchsia-200"
                         : "bg-white/5 border border-white/10 text-white/60 hover:text-white"
                     }`}
                   >
-                    Hostel {h}
+                    {h}
                   </button>
                 ))}
               </div>
@@ -427,13 +428,13 @@ export default function CircularSwapsPage() {
                     <button
                       key={b}
                       onClick={() => toggleArray(wantsBlocks, setWantsBlocks, b)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-bold transition ${
+                      className={`h-9 min-w-9 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center border ${
                         wantsBlocks.includes(b)
-                          ? "bg-fuchsia-500/25 border border-fuchsia-400/50 text-fuchsia-200"
+                          ? "bg-fuchsia-500/25 border-fuchsia-400/50 text-fuchsia-200"
                           : "bg-white/5 border border-white/10 text-white/60 hover:text-white"
                       }`}
                     >
-                      Block {b}
+                      {b}
                     </button>
                   ))}
                 </div>
@@ -507,9 +508,9 @@ export default function CircularSwapsPage() {
                         </div>
 
                         {/* Interactive flow map */}
-                        <div className="grid gap-3 md:grid-cols-3">
+                        <div className="flex flex-col md:flex-row items-stretch gap-3">
                           {/* Node 1: You */}
-                          <div className="rounded-[1.25rem] border border-cyan-400/20 bg-cyan-400/5 p-4 flex flex-col justify-between">
+                          <div className="flex-1 rounded-[1.25rem] border border-cyan-400/20 bg-cyan-400/5 p-4 flex flex-col justify-between">
                             <div>
                               <p className="text-[0.65rem] font-bold text-cyan-300 uppercase">Your Room (A)</p>
                               <p className="text-2xl font-black mt-1">Room {chain[0].room}</p>
@@ -521,15 +522,21 @@ export default function CircularSwapsPage() {
                             </p>
                           </div>
 
+                          {/* Connector 1 */}
+                          <div className="flex items-center justify-center text-fuchsia-400/60 py-1 md:py-0">
+                            <ArrowRight className="hidden md:block h-5 w-5" />
+                            <ArrowDown className="md:hidden h-5 w-5" />
+                          </div>
+
                           {/* Node 2: Student B */}
-                          <div className="rounded-[1.25rem] border border-white/10 bg-white/6 p-4 flex flex-col justify-between">
+                          <div className="flex-1 rounded-[1.25rem] border border-white/10 bg-white/6 p-4 flex flex-col justify-between">
                             <div>
                               <p className="text-[0.65rem] font-bold text-white/50 uppercase">Student (B)</p>
                               <p className="text-2xl font-black mt-1">Room {chain[1].room}</p>
                               <p className="text-xs text-white/55 mt-0.5">Hostel {chain[1].hostel}</p>
                               <p className="text-[0.65rem] text-white/40 mt-1 font-semibold">{chain[1].roomType}</p>
                             </div>
-                            <div className="mt-3 border-t border-white/5 pt-2 flex items-center justify-between">
+                            <div className="mt-3 border-t border-white/5 pt-2 flex items-center justify-between gap-2">
                               <span className="text-xs text-white/40 italic">Wants Room {chain[2].room}</span>
                               <a
                                 href={`https://wa.me/${chain[1].whatsapp}`}
@@ -542,15 +549,21 @@ export default function CircularSwapsPage() {
                             </div>
                           </div>
 
+                          {/* Connector 2 */}
+                          <div className="flex items-center justify-center text-fuchsia-400/60 py-1 md:py-0">
+                            <ArrowRight className="hidden md:block h-5 w-5" />
+                            <ArrowDown className="md:hidden h-5 w-5" />
+                          </div>
+
                           {/* Node 3: Student C */}
-                          <div className="rounded-[1.25rem] border border-white/10 bg-white/6 p-4 flex flex-col justify-between">
+                          <div className="flex-1 rounded-[1.25rem] border border-white/10 bg-white/6 p-4 flex flex-col justify-between">
                             <div>
                               <p className="text-[0.65rem] font-bold text-white/50 uppercase">Student (C)</p>
                               <p className="text-2xl font-black mt-1">Room {chain[2].room}</p>
                               <p className="text-xs text-white/55 mt-0.5">Hostel {chain[2].hostel}</p>
                               <p className="text-[0.65rem] text-white/40 mt-1 font-semibold">{chain[2].roomType}</p>
                             </div>
-                            <div className="mt-3 border-t border-white/5 pt-2 flex items-center justify-between">
+                            <div className="mt-3 border-t border-white/5 pt-2 flex items-center justify-between gap-2">
                               <span className="text-xs text-white/40 italic">Wants Your Room</span>
                               <a
                                 href={`https://wa.me/${chain[2].whatsapp}`}
