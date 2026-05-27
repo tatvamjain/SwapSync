@@ -690,7 +690,7 @@ function Navbar({
         <a href="#browse" className="ml-auto hidden text-sm font-bold text-white/72 transition hover:text-white md:block">
           Browse Swaps
         </a>
-        <Link href="/circular" className="hidden text-sm font-bold text-cyan-200 transition hover:text-cyan-100 md:block">
+        <Link href="/circular" className="ml-auto md:ml-4 text-xs sm:text-sm font-bold text-cyan-200 transition hover:text-cyan-100 block">
           🔄 Circular Swaps
         </Link>
         <label className="relative hidden min-w-72 items-center md:flex">
@@ -723,10 +723,10 @@ function Hero({
   onPost: () => void;
 }) {
   const positions = [
-    { className: "left-[4%] top-28 hidden md:block", rotate: "-6deg" },
-    { className: "right-[5%] top-24 hidden sm:block", rotate: "5deg" },
-    { className: "left-[14%] bottom-12 hidden md:block", rotate: "4deg" },
-    { className: "right-[16%] bottom-10 hidden md:block", rotate: "-4deg" },
+    { className: "left-[2%] top-20 sm:left-[4%] sm:top-28 block", rotate: "-6deg" },
+    { className: "right-[2%] top-16 sm:right-[5%] sm:top-24 block", rotate: "5deg" },
+    { className: "left-[2%] bottom-6 sm:left-[14%] sm:bottom-12 block", rotate: "4deg" },
+    { className: "right-[2%] bottom-6 sm:right-[16%] sm:bottom-10 block", rotate: "-4deg" },
   ];
 
   return (
@@ -735,14 +735,14 @@ function Hero({
       {featuredListings.slice(0, positions.length).map((listing, index) => (
         <div
           key={listing.id}
-          className={`float-card glass absolute w-32 rounded-[1.7rem] p-4 opacity-80 ${positions[index].className}`}
+          className={`float-card glass absolute w-24 rounded-2xl p-2.5 opacity-60 sm:opacity-80 sm:w-32 sm:rounded-[1.7rem] sm:p-4 ${positions[index].className}`}
           style={{ "--rotate": positions[index].rotate, animationDelay: `${index * 0.6}s` } as React.CSSProperties}
         >
-          <p className="text-xs font-black text-cyan-200">
+          <p className="text-[0.6rem] sm:text-xs font-black text-cyan-200">
             Hostel {listing.hostel}{listing.block ? `-${listing.block}` : ""}
           </p>
-          <p className="mt-2 text-3xl font-black">{listing.room}</p>
-          <p className="mt-1 text-xs font-bold text-white/55">{listing.roomType}</p>
+          <p className="mt-1 text-lg sm:mt-2 sm:text-3xl font-black">{listing.room}</p>
+          <p className="mt-0.5 text-[0.55rem] sm:mt-1 sm:text-xs font-bold text-white/55 truncate">{listing.roomType}</p>
         </div>
       ))}
       <div className="mx-auto max-w-4xl text-center">
