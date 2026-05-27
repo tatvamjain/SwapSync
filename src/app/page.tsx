@@ -988,7 +988,7 @@ function ListingCard({
           onClick={onSwapped}
           className="h-11 rounded-full border border-white/10 bg-white/8 px-4 text-xs font-black text-white/72 transition hover:border-emerald-300/45 hover:bg-emerald-300/12 hover:text-emerald-100"
         >
-          Swapped
+          Mark as Swapped
         </button>
         <span className="text-xs font-bold text-white/38 shrink-0">{listing.posted}</span>
       </div>
