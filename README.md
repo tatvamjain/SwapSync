@@ -21,10 +21,8 @@ Instead of scrolling endlessly through WhatsApp groups, students can:
 - 🏠 Post room swap requests
 - 🔄 3-way circular swap detection
 - 🔎 “Who wants your room?” reverse search
-- 🧩 Hostel M block support
 - 👥 Separate boys/girls hostel networks
 - 📱 Fully mobile responsive
-- 🌙 Modern dark UI
 
 ---
 
@@ -55,12 +53,10 @@ http://localhost:3000
 
 ## 👨‍💻 Contributors
 
-### Anjani Agarwal
-Frontend • Product • UI/UX  
+### Anjani Agarwal 
 🔗 https://www.linkedin.com/in/anjani-ag24
 
-### Tatvam Jain
-Backend • Logic • Systems  
+### Tatvam Jain 
 🔗 https://www.linkedin.com/in/tatvam-jain-41987b217/
 
 ---
