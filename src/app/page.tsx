@@ -667,6 +667,8 @@ export default function Home() {
           />
         )}
       </AnimatePresence>
+
+      <Footer />
     </main>
   );
 }
@@ -1649,5 +1651,83 @@ function Tag({ label, active, onClick }: { label: string; active: boolean; onCli
     >
       {label}
     </button>
+  );
+}
+
+function Footer() {
+  const contributors = [
+    {
+      name: "Anjani Agarwal",
+      url: "https://www.linkedin.com/in/anjani-ag24",
+    },
+    {
+      name: "Tatvam Jain",
+      url: "https://www.linkedin.com/in/tatvam-jain-41987b217/",
+    },
+  ];
+
+  return (
+    <footer className="relative border-t border-white/[0.06] bg-[#060611]/60 backdrop-blur-xl">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="flex flex-col items-center gap-3 text-center">
+
+          {/* Tagline */}
+          <p className="text-[0.75rem] font-semibold tracking-[0.16em] text-white/25 uppercase">
+            Hostel swaps, simplified.
+          </p>
+
+          {/* Soft divider */}
+          <span className="h-px w-10 bg-gradient-to-r from-transparent via-white/12 to-transparent" />
+
+          {/* Contributors row */}
+          <div className="flex flex-col items-center gap-1.5 sm:flex-row sm:items-center sm:gap-1">
+            <span className="text-[0.68rem] font-medium tracking-[0.14em] text-white/18 uppercase">
+              Built by
+            </span>
+
+            {/* Dot separator — desktop only */}
+            <span className="hidden sm:inline text-white/15 mx-1 text-xs">·</span>
+
+            <div className="flex flex-col items-center gap-1.5 sm:flex-row sm:gap-4">
+              {contributors.map((c, i) => (
+                <span key={c.name} className="inline-flex items-center gap-2 sm:gap-1.5">
+                  <a
+                    href={c.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group relative inline-flex items-center gap-1 text-[0.75rem] font-semibold text-white/35 transition-all duration-300 hover:text-white/85"
+                  >
+                    <span className="relative">
+                      {c.name}
+                      {/* Underline glow on hover */}
+                      <span className="absolute -bottom-px left-0 h-px w-0 rounded-full bg-gradient-to-r from-blue-400/50 to-violet-400/50 transition-all duration-300 group-hover:w-full" />
+                    </span>
+                    {/* External link arrow */}
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-2.5 w-2.5 -translate-y-px text-white/18 transition-all duration-300 group-hover:text-blue-400/60 group-hover:translate-x-px group-hover:-translate-y-0.5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M7 17L17 7" />
+                      <path d="M7 7h10v10" />
+                    </svg>
+                  </a>
+                  {/* Middle dot separator between names — desktop */}
+                  {i < contributors.length - 1 && (
+                    <span className="hidden sm:inline text-white/15 text-xs">·</span>
+                  )}
+                </span>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </footer>
   );
 }
