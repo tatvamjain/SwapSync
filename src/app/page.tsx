@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight,
@@ -575,11 +576,6 @@ export default function Home() {
           onSwapped={(listing) => { setSwapCheck(listing); setSwapCodeInput(""); setSwapCodeError(""); }}
         />
 
-        {/* 3-Way Circular Swaps Section */}
-        {circularSwaps.length > 0 && (
-          <CircularSwapsSection chains={circularSwaps} onView={(chain) => setChainModal(chain)} />
-        )}
-
         {filteredListings.length ? (
           <motion.div layout className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <AnimatePresence>
@@ -694,6 +690,9 @@ function Navbar({
         <a href="#browse" className="ml-auto hidden text-sm font-bold text-white/72 transition hover:text-white md:block">
           Browse Swaps
         </a>
+        <Link href="/circular" className="hidden text-sm font-bold text-cyan-200 transition hover:text-cyan-100 md:block">
+          🔄 Circular Swaps
+        </Link>
         <label className="relative hidden min-w-72 items-center md:flex">
           <Search className="pointer-events-none absolute left-4 h-4 w-4 text-white/45" />
           <input
