@@ -5,7 +5,7 @@ export type Listing = {
   id: number;
   hostel: string;
   block?: string;
-  room: string;
+  room: number;
   floor: string;
   roomType: string;
   wants: {
@@ -14,6 +14,7 @@ export type Listing = {
     rooms: string[];
     floors: string[];
   };
+  description?: string;
   whatsapp: string;
   swapCode: string;
   posted: string;
@@ -33,10 +34,11 @@ type ListingRow = {
   id: number;
   hostel: string;
   block: string | null;
-  room: string;
+  room: number;
   floor: string;
   room_type: string;
   wants: Listing["wants"];
+  description: string | null;
   whatsapp: string;
   swap_code: string;
   created_at: string;
@@ -78,6 +80,7 @@ function toPublicListing(listing: Listing): PublicListing {
     floor: listing.floor,
     roomType: listing.roomType,
     wants: listing.wants,
+    description: listing.description,
     whatsapp: listing.whatsapp,
     posted: listing.posted,
     createdAt: listing.createdAt,
@@ -108,6 +111,7 @@ function rowToListing(row: ListingRow): Listing {
     floor: row.floor,
     roomType: row.room_type,
     wants: row.wants,
+    description: row.description ?? undefined,
     whatsapp: row.whatsapp,
     swapCode: row.swap_code,
     posted: formatPosted(row.created_at),
@@ -116,13 +120,13 @@ function rowToListing(row: ListingRow): Listing {
   };
 }
 
-function generateSwapCode(hostel: string, room: string) {
+function generateSwapCode(hostel: string, room: string | number) {
   const randomPart = randomBytes(3).toString("hex").toUpperCase();
   return `SYNC-${hostel.replace(/\s/g, "")}${room}-${randomPart}`.toUpperCase();
 }
 
-function normalizeWhatsAppNumber(value: string) {
-  const digits = value.replace(/\D/g, "");
+function normalizeWhatsAppNumber(value: string | number) {
+  const digits = String(value).replace(/\D/g, "");
   const withoutInternationalPrefix = digits.startsWith("00") ? digits.slice(2) : digits;
 
   if (withoutInternationalPrefix.length === 10) {
@@ -250,6 +254,7 @@ export async function createListing(input: Omit<Listing, "id" | "swapCode" | "po
     floor: input.floor,
     room_type: input.roomType,
     wants: input.wants,
+    description: input.description?.trim() || null,
     whatsapp: normalizeWhatsAppNumber(input.whatsapp),
     swap_code: generateSwapCode(input.hostel, input.room),
     status: "active",
@@ -302,3 +307,46 @@ export async function markListingSwapped(id: number, swapCode: string) {
 
   return { ok: true, status: 200, message: "Listing marked as swapped." };
 }
+
+/** New: Retrieve reverse room matches with scoring **/
+export async function getMatches(query: { hostel: string; block?: string; room: string }) {
+  const { data, error } = await getSupabase()
+    .from("listings")
+    .select("*")
+    .eq("status", "active");
+
+  if (error) throw new Error(`Unable to load listings for matches: ${error.message}`);
+
+  const rows = data as ListingRow[];
+  const targetFloor = (() => {
+    const firstDigit = query.room.trim().match(/\d/);
+    if (!firstDigit) return "1st";
+    const num = Number(firstDigit[0]);
+    const floors = ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th"];
+    return floors[num - 1] ?? "1st";
+  })();
+
+  const matches = rows.map((row) => {
+    const listing = rowToListing(row);
+    let score = 0;
+    const exactHostel = listing.wants.hostels.includes(query.hostel);
+    const exactRoom = listing.wants.rooms.includes(query.room);
+    const exactBlock = query.block && listing.wants.blocks.includes(query.block);
+    const exactFloor = listing.wants.floors.includes(targetFloor);
+
+    if (exactHostel && exactRoom) {
+      score = 100;
+    } else {
+      if (exactHostel) score += 40;
+      if (exactFloor) score += 20;
+      if (exactRoom) score += 30;
+      if (exactBlock) score += 10;
+    }
+    return { listing, matchScore: score };
+  }).filter((m) => m.matchScore > 0);
+
+  matches.sort((a, b) => b.matchScore - a.matchScore);
+  return matches;
+}
+
+

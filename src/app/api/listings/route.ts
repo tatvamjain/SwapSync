@@ -88,6 +88,7 @@ export async function POST(request: Request) {
   const floor = String(body.floor);
   const roomType = String(body.roomType).trim();
   const whatsapp = String(body.whatsapp).trim();
+  const description = body.description ? String(body.description).trim().slice(0, 400) : undefined;
   const wants = {
     hostels: readStringArray(body.wants?.hostels),
     blocks: readStringArray(body.wants?.blocks),
@@ -154,10 +155,11 @@ export async function POST(request: Request) {
     const result = await createListing({
       hostel,
       block,
-      room,
+      room: Number(room),
       floor,
       roomType,
       wants,
+      description,
       whatsapp,
     });
 

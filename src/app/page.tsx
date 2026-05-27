@@ -6,15 +6,15 @@ import {
   BedDouble,
   Check,
   ChevronDown,
-  Flame,
   MessageCircle,
   Plus,
+  RefreshCw,
   Search,
   SlidersHorizontal,
   X,
   Zap,
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 const girlsHostels = ["E", "G", "I", "N", "Q", "PG I", "PG II"];
 const hostels = [
@@ -91,6 +91,7 @@ type Listing = {
     rooms: string[];
     floors: string[];
   };
+  description?: string;
   whatsapp: string;
   whatsappUrl?: string;
   swapCode?: string;
@@ -169,6 +170,7 @@ const blankListing: Omit<Listing, "id" | "posted"> = {
     rooms: [],
     floors: ["1st"],
   },
+  description: "",
   whatsapp: "",
   swapCode: "",
 };
@@ -193,6 +195,66 @@ function isWantedRoomComplete(form: Omit<Listing, "id" | "posted">) {
   );
 }
 
+type MatchResult = { listing: Listing; matchScore: number };
+type SwapChain = [Listing, Listing, Listing];
+
+function detectThreeWaySwaps(listings: Listing[]): SwapChain[] {
+  const cycles: SwapChain[] = [];
+  const uniq = new Set<string>();
+  for (const a of listings) {
+    for (const wantHostel of a.wants.hostels) {
+      const possibleB = listings.filter((b) => {
+        if (b.id === a.id || b.hostel !== wantHostel) return false;
+        if (wantHostel === "M" && a.wants.blocks.length && !a.wants.blocks.includes(b.block ?? "")) return false;
+        if (a.wants.rooms.length && !a.wants.rooms.includes(b.room) && !a.wants.rooms.includes(anyRoomPreference)) return false;
+        return true;
+      });
+      for (const b of possibleB) {
+        for (const bHostel of b.wants.hostels) {
+          const possibleC = listings.filter((c) => {
+            if (c.id === a.id || c.id === b.id || c.hostel !== bHostel) return false;
+            if (bHostel === "M" && b.wants.blocks.length && !b.wants.blocks.includes(c.block ?? "")) return false;
+            if (b.wants.rooms.length && !b.wants.rooms.includes(c.room) && !b.wants.rooms.includes(anyRoomPreference)) return false;
+            return true;
+          });
+          for (const c of possibleC) {
+            const cWantsA = c.wants.hostels.includes(a.hostel) &&
+              (a.hostel !== "M" || !c.wants.blocks.length || c.wants.blocks.includes(a.block ?? "")) &&
+              (!c.wants.rooms.length || c.wants.rooms.includes(a.room) || c.wants.rooms.includes(anyRoomPreference));
+            if (cWantsA) {
+              const key = [a.id, b.id, c.id].sort((x, y) => x - y).join("-");
+              if (!uniq.has(key)) { uniq.add(key); cycles.push([a, b, c]); }
+            }
+          }
+        }
+      }
+    }
+  }
+  return cycles;
+}
+
+function computeMatchScore(listing: Listing, query: { hostel: string; block?: string; room: string; floor: string }) {
+  // ── STRICT FILTERING ──────────────────────────────────────────────────────
+  // Every requirement the student set must match. If ANY fails → score 0 (hidden).
+
+  // 1. Hostel must match
+  if (!listing.wants.hostels.includes(query.hostel)) return 0;
+
+  // 2. Block must match (only relevant for Hostel M)
+  if (query.block && listing.wants.blocks.length && !listing.wants.blocks.includes(query.block)) return 0;
+
+  // 3. Floor must match if the student specified a floor preference
+  if (listing.wants.floors.length && !listing.wants.floors.includes(query.floor)) return 0;
+
+  // 4. Room must match if the student specified exact rooms (not "Any Room")
+  const wantsAnyRoom = listing.wants.rooms.includes(anyRoomPreference) || listing.wants.rooms.length === 0;
+  if (!wantsAnyRoom && !listing.wants.rooms.includes(query.room)) return 0;
+
+  // ── SCORING ───────────────────────────────────────────────────────────────
+  // Only reached when ALL requirements match.
+  return 100;
+}
+
 export default function Home() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [listingStats, setListingStats] = useState<ListingStats>(defaultStats);
@@ -215,6 +277,14 @@ export default function Home() {
   const [swapCodeInput, setSwapCodeInput] = useState("");
   const [swapCodeError, setSwapCodeError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Reverse search
+  const [rsHostel, setRsHostel] = useState("");
+  const [rsBlock, setRsBlock] = useState("");
+  const [rsRoom, setRsRoom] = useState("");
+  const [rsResults, setRsResults] = useState<MatchResult[] | null>(null);
+  const [rsLoading, setRsLoading] = useState(false);
+  // Chain swap modal
+  const [chainModal, setChainModal] = useState<SwapChain | null>(null);
 
   const activeGender = selectedGender;
 
@@ -257,6 +327,20 @@ export default function Home() {
       return sameGender && hostelMatch && floorMatch && typeMatch && blockMatch && acMatch && attachedMatch && searchMatch;
     });
   }, [activeGender, listings, onlyAc, onlyAttached, search, selectedBlock, selectedFloor, selectedHostel, selectedRoomType]);
+
+  const circularSwaps = useMemo(() => detectThreeWaySwaps(listings), [listings]);
+
+  const handleReverseSearch = useCallback(async () => {
+    if (!rsHostel || !rsRoom) return;
+    setRsLoading(true);
+    const floor = floorForRoom(rsRoom);
+    const matched = listings
+      .map((l) => ({ listing: l, matchScore: computeMatchScore(l, { hostel: rsHostel, block: rsBlock || undefined, room: rsRoom, floor }) }))
+      .filter((m) => m.matchScore > 0)
+      .sort((a, b) => b.matchScore - a.matchScore);
+    setRsResults(matched);
+    setRsLoading(false);
+  }, [rsHostel, rsBlock, rsRoom, listings]);
 
   const stats = [
     { label: "Active swap requests", value: listingStats.activeCount },
@@ -476,6 +560,26 @@ export default function Home() {
         </div>
         )}
 
+        {/* Reverse Room Search Section */}
+        <ReverseSearchSection
+          hostel={rsHostel}
+          block={rsBlock}
+          room={rsRoom}
+          loading={rsLoading}
+          results={rsResults}
+          onHostelChange={(v) => { setRsHostel(v); setRsBlock(""); setRsResults(null); }}
+          onBlockChange={(v) => { setRsBlock(v); setRsResults(null); }}
+          onRoomChange={(v) => { setRsRoom(v); setRsResults(null); }}
+          onSearch={handleReverseSearch}
+          onClear={() => setRsResults(null)}
+          onSwapped={(listing) => { setSwapCheck(listing); setSwapCodeInput(""); setSwapCodeError(""); }}
+        />
+
+        {/* 3-Way Circular Swaps Section */}
+        {circularSwaps.length > 0 && (
+          <CircularSwapsSection chains={circularSwaps} onView={(chain) => setChainModal(chain)} />
+        )}
+
         {filteredListings.length ? (
           <motion.div layout className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <AnimatePresence>
@@ -538,6 +642,13 @@ export default function Home() {
               setForm(blankListing);
             }}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Chain Swap Modal */}
+      <AnimatePresence>
+        {chainModal && (
+          <ChainSwapModal chain={chainModal} onClose={() => setChainModal(null)} />
         )}
       </AnimatePresence>
 
@@ -789,22 +900,30 @@ function ToggleChip({ label, active, onClick }: { label: string; active: boolean
   );
 }
 
+function MatchScoreBadge({ score }: { score: number }) {
+  const grad = score === 100
+    ? "from-emerald-400 to-cyan-400 shadow-[0_0_18px_rgba(52,211,153,0.5)]"
+    : score >= 70
+    ? "from-amber-400 to-orange-500 shadow-[0_0_14px_rgba(251,146,60,0.4)]"
+    : "from-slate-400 to-slate-600";
+  return (
+    <span className={`inline-flex items-center rounded-full bg-gradient-to-r px-3 py-1.5 text-[0.65rem] font-black text-white ${grad}`}>
+      {score === 100 ? "🔥 Exact Match" : `${score}% Match`}
+    </span>
+  );
+}
+
 function ListingCard({
   listing,
   index,
   onSwapped,
+  matchScore,
 }: {
   listing: Listing;
   index: number;
   onSwapped: () => void;
+  matchScore?: number;
 }) {
-  const badges = [
-    listing.roomType.includes("AC") ? "AC" : null,
-    listing.roomType.includes("Attached") ? "Attached" : null,
-    listing.roomType.split(" ")[0],
-    `${listing.floor} Floor`,
-  ].filter(Boolean);
-  const perfect = listing.wants.hostels.includes(listing.hostel) || listing.wants.rooms.includes(listing.room);
   const whatsappUrl = listing.whatsappUrl ?? buildContactWhatsAppUrl(listing);
 
   return (
@@ -817,53 +936,50 @@ function ListingCard({
       className="group glass relative overflow-hidden rounded-[1.8rem] p-5 transition duration-300 hover:-translate-y-1 hover:border-cyan-300/35 hover:shadow-[0_24px_90px_rgba(34,211,238,0.16)]"
     >
       <div className="absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-cyan-200/60 to-transparent opacity-0 transition group-hover:opacity-100" />
+
+      {/* TOP: Hostel + Block / Room Number / Badge */}
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-black text-cyan-200">
-            Hostel {listing.hostel}
-            {listing.block ? ` - Block ${listing.block}` : ""}
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-400">
+            Hostel {listing.hostel}{listing.block ? ` · Block ${listing.block}` : ""}
           </p>
-          <p className="mt-3 text-5xl font-black tracking-tight">{listing.room}</p>
+          <p className="mt-1.5 text-5xl font-black tracking-tight leading-none">{listing.room}</p>
+          <p className="mt-1.5 text-sm font-semibold text-white/50">{listing.floor} Floor · {listing.roomType}</p>
         </div>
-        {perfect && (
-          <span className="inline-flex items-center gap-1 rounded-full border border-orange-300/40 bg-orange-300/15 px-3 py-1.5 text-[0.65rem] font-black text-orange-100 shadow-[0_0_26px_rgba(251,146,60,0.26)]">
-            <Flame className="h-3.5 w-3.5" />
-            PERFECT MATCH
-          </span>
-        )}
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          {matchScore !== undefined && <MatchScoreBadge score={matchScore} />}
+        </div>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <InfoPill label="Floor" value={listing.floor} />
-        <InfoPill label="Room Type" value={listing.roomType} />
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {badges.map((badge) => (
-          <span key={badge} className="rounded-full bg-white/9 px-3 py-1 text-xs font-black text-white/72">
-            {badge}
-          </span>
-        ))}
-      </div>
-      <div className="mt-5 rounded-[1.25rem] border border-white/8 bg-black/16 p-4">
-        <p className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-white/42">Looking For</p>
-        <div className="flex flex-wrap gap-2">
+
+      {/* LOOKING FOR */}
+      <div className="mt-4 rounded-[1.25rem] border border-white/8 bg-black/16 p-3">
+        <p className="mb-2 text-[0.65rem] font-black uppercase tracking-[0.16em] text-white/40">Looking For</p>
+        <div className="flex flex-wrap gap-1.5">
           {[
             ...listing.wants.hostels.map((item) => `Hostel ${item}`),
             ...listing.wants.blocks.map((item) => `Block ${item}`),
             ...listing.wants.rooms.map((item) => (item === anyRoomPreference ? item : `Room ${item}`)),
             ...listing.wants.floors,
           ].map((item) => (
-            <span key={item} className="rounded-full bg-cyan-300/10 px-3 py-1 text-xs font-bold text-cyan-100">
+            <span key={item} className="rounded-full bg-cyan-300/10 px-2.5 py-1 text-xs font-bold text-cyan-100">
               {item}
             </span>
           ))}
         </div>
+        {listing.description && (
+          <p className="mt-2 text-xs font-semibold text-white/60 leading-relaxed border-t border-white/8 pt-2">
+            {listing.description}
+          </p>
+        )}
       </div>
-      <div className="mt-5 flex items-center gap-3">
+
+      {/* ACTIONS */}
+      <div className="mt-4 flex items-center gap-2">
         <a
           href={whatsappUrl}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#25D366] text-sm font-black text-[#04130a] transition hover:scale-[1.02]"
+          className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-[#25D366] text-sm font-black text-[#04130a] shadow-[0_8px_24px_rgba(37,211,102,0.28)] transition hover:scale-[1.02]"
         >
           <MessageCircle className="h-4 w-4" />
           WhatsApp
@@ -871,13 +987,214 @@ function ListingCard({
         <button
           type="button"
           onClick={onSwapped}
-          className="h-12 rounded-full border border-white/10 bg-white/8 px-4 text-xs font-black text-white/72 transition hover:border-emerald-300/45 hover:bg-emerald-300/12 hover:text-emerald-100"
+          className="h-11 rounded-full border border-white/10 bg-white/8 px-4 text-xs font-black text-white/72 transition hover:border-emerald-300/45 hover:bg-emerald-300/12 hover:text-emerald-100"
         >
-          Mark Swapped
+          Swapped
         </button>
-        <span className="text-xs font-bold text-white/42">{listing.posted}</span>
+        <span className="text-xs font-bold text-white/38 shrink-0">{listing.posted}</span>
       </div>
     </motion.article>
+  );
+}
+
+// ─── Reverse Room Search Section ────────────────────────────────────────────
+
+function ReverseSearchSection({
+  hostel, block, room, loading, results,
+  onHostelChange, onBlockChange, onRoomChange, onSearch, onClear, onSwapped,
+}: {
+  hostel: string; block: string; room: string;
+  loading: boolean; results: MatchResult[] | null;
+  onHostelChange: (v: string) => void;
+  onBlockChange: (v: string) => void;
+  onRoomChange: (v: string) => void;
+  onSearch: () => void;
+  onClear: () => void;
+  onSwapped: (l: Listing) => void;
+}) {
+  return (
+    <div className="mb-6">
+      <div className="glass rounded-[1.8rem] p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <Search className="h-4 w-4 text-cyan-300" />
+          <h2 className="text-base font-black text-cyan-100">See Who Wants Your Room</h2>
+        </div>
+        <p className="text-xs font-semibold text-white/55 mb-4">Enter your room details and instantly check if anyone is looking for it.</p>
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={hostel}
+            onChange={(e) => onHostelChange(e.target.value)}
+            className="h-11 appearance-none rounded-full border border-white/10 bg-white/9 px-4 pr-8 text-sm font-bold text-white outline-none focus:border-cyan-300/60"
+          >
+            <option value="">Select Hostel</option>
+            {hostels.map((h) => <option key={h} value={h} className="bg-[#101322]">Hostel {h}</option>)}
+          </select>
+          {hostel === "M" && (
+            <select
+              value={block}
+              onChange={(e) => onBlockChange(e.target.value)}
+              className="h-11 appearance-none rounded-full border border-white/10 bg-white/9 px-4 pr-8 text-sm font-bold text-white outline-none focus:border-cyan-300/60"
+            >
+              <option value="">Any Block</option>
+              {blocks.map((b) => <option key={b} value={b} className="bg-[#101322]">Block {b}</option>)}
+            </select>
+          )}
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={3}
+            placeholder="Room no. e.g. 412"
+            value={room}
+            onChange={(e) => onRoomChange(e.target.value.replace(/\D/g, "").slice(0, 3))}
+            onKeyDown={(e) => e.key === "Enter" && onSearch()}
+            className="h-11 w-36 rounded-full border border-white/10 bg-white/9 px-4 text-sm font-bold text-white outline-none placeholder:text-white/35 focus:border-cyan-300/60"
+          />
+          <button
+            onClick={onSearch}
+            disabled={!hostel || !room || loading}
+            className="inline-flex h-11 items-center gap-2 rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 px-5 text-sm font-black text-white shadow-[0_8px_28px_rgba(56,189,248,0.35)] transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            Find Matches
+          </button>
+          {results !== null && (
+            <button onClick={onClear} className="h-11 rounded-full border border-white/10 bg-white/8 px-4 text-xs font-black text-white/60 transition hover:text-white">
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {results !== null && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            className="mt-4"
+          >
+            {results.length === 0 ? (
+              <div className="glass rounded-[1.5rem] p-6 text-center">
+                <p className="text-2xl">😔</p>
+                <p className="mt-2 font-black text-white">No exact matches found</p>
+                <p className="mt-1 text-sm font-semibold text-white/55">No one is currently looking for your room, but new listings come in daily!</p>
+              </div>
+            ) : (
+              <div>
+                <p className="mb-3 text-sm font-black text-white/70">{results.length} student{results.length > 1 ? "s" : ""} looking for your room</p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {results.map((r, i) => (
+                    <ListingCard key={r.listing.id} listing={r.listing} index={i} onSwapped={() => onSwapped(r.listing)} matchScore={r.matchScore} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Circular Swaps Section ──────────────────────────────────────────────────
+
+function CircularSwapsSection({ chains, onView }: { chains: SwapChain[]; onView: (c: SwapChain) => void }) {
+  return (
+    <div className="mb-6">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="text-lg">🔄</span>
+        <h2 className="text-base font-black text-white">Circular Swaps Found</h2>
+        <span className="rounded-full bg-fuchsia-400/20 px-2.5 py-0.5 text-xs font-black text-fuchsia-200 border border-fuchsia-400/30">
+          {chains.length}
+        </span>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2 [scrollbar-width:none]">
+        {chains.map((chain, i) => (
+          <div
+            key={i}
+            className="shrink-0 rounded-[1.5rem] border border-fuchsia-400/30 bg-gradient-to-br from-fuchsia-900/30 to-blue-900/20 p-4 shadow-[0_0_30px_rgba(217,70,239,0.15)] w-72"
+            style={{ animation: `chain-glow 3s ease-in-out infinite`, animationDelay: `${i * 0.4}s` }}
+          >
+            <p className="text-[0.65rem] font-black uppercase tracking-[0.16em] text-fuchsia-300 mb-2">3-Way Swap Possible</p>
+            <p className="text-sm font-black text-white">
+              Room {chain[0].room} → Room {chain[1].room} → Room {chain[2].room} → Room {chain[0].room}
+            </p>
+            <p className="mt-1 text-xs text-white/50">
+              H{chain[0].hostel} · H{chain[1].hostel} · H{chain[2].hostel}
+            </p>
+            <button
+              onClick={() => onView(chain)}
+              className="mt-3 h-9 w-full rounded-full bg-fuchsia-400/20 border border-fuchsia-400/40 text-xs font-black text-fuchsia-100 transition hover:bg-fuchsia-400/35"
+            >
+              View Chain
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Chain Swap Modal ────────────────────────────────────────────────────────
+
+function ChainSwapModal({ chain, onClose }: { chain: SwapChain; onClose: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[60] grid place-items-center bg-black/70 p-4 backdrop-blur-xl"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 32, opacity: 0, scale: 0.96 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 32, opacity: 0, scale: 0.96 }}
+        onClick={(e) => e.stopPropagation()}
+        className="glass w-full max-w-lg rounded-[2rem] p-6"
+      >
+        <div className="flex items-start justify-between gap-4 mb-5">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-fuchsia-300">3-Way Circular Swap</p>
+            <h3 className="mt-1 text-2xl font-black">Swap Chain Details</h3>
+          </div>
+          <button onClick={onClose} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/10 text-white/75 transition hover:bg-white/16">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="flex flex-col gap-3">
+          {chain.map((listing, i) => (
+            <div key={listing.id}>
+              <div className="rounded-[1.25rem] border border-white/10 bg-white/6 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-black text-cyan-300 uppercase tracking-wider">Hostel {listing.hostel}{listing.block ? ` Block ${listing.block}` : ""}</p>
+                    <p className="text-3xl font-black mt-0.5">{listing.room}</p>
+                    <p className="text-xs text-white/50 mt-0.5">{listing.roomType}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[0.65rem] text-white/40 uppercase tracking-wider">Wants</p>
+                    <p className="text-sm font-black text-white">
+                      {chain[(i + 1) % 3].wants.rooms.includes(anyRoomPreference) ? "Any Room" : `Room ${chain[(i + 1) % 3].room}`}
+                    </p>
+                    <p className="text-xs text-white/50">H{chain[(i + 1) % 3].hostel}</p>
+                  </div>
+                </div>
+              </div>
+              {i < 2 && (
+                <div className="flex justify-center my-1">
+                  <span className="text-fuchsia-300 text-lg">↓</span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 rounded-[1.25rem] border border-fuchsia-300/20 bg-fuchsia-300/8 p-3 text-center">
+          <p className="text-xs font-black text-fuchsia-200">🔄 Room {chain[2].room} loops back to Room {chain[0].room} — perfect circular swap!</p>
+        </div>
+        <p className="mt-4 text-xs text-center font-semibold text-white/45">Contact each student via WhatsApp to coordinate the 3-way swap.</p>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -1205,6 +1522,16 @@ function PostModal({
               <ChipGroup title="Preferred Blocks" values={blocks} selected={form.wants.blocks} onToggle={(value) => toggleArray("blocks", value)} prefix="Block " />
             )}
             <ChipGroup title="Preferred Floors" values={floors} selected={form.wants.floors} onToggle={(value) => toggleArray("floors", value)} />
+            <div>
+              <span className="mb-2 block text-sm font-black text-white/70">Description <span className="text-white/35 font-semibold text-xs">(optional)</span></span>
+              <textarea
+                value={form.description ?? ""}
+                onChange={(e) => setForm({ description: e.target.value })}
+                placeholder="e.g. Looking for attached washroom only, ground floor not preferred, must be same block..."
+                rows={3}
+                className="w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white outline-none placeholder:text-white/30 focus:border-cyan-300/60 resize-none leading-relaxed"
+              />
+            </div>
             <FormInput
               label="WhatsApp Number"
               value={form.whatsapp}
