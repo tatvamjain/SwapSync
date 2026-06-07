@@ -600,7 +600,7 @@ export default function Home() {
 
       <button
         onClick={() => setModalOpen(true)}
-        className="fixed bottom-5 left-1/2 z-30 inline-flex h-14 -translate-x-1/2 items-center gap-2 rounded-full bg-gradient-to-r from-cyan-300 via-blue-400 to-fuchsia-400 px-6 text-sm font-black text-[#050711] shadow-[0_18px_60px_rgba(56,189,248,0.35)] sm:hidden"
+        className="fixed bottom-5 left-1/2 z-30 inline-flex h-14 -translate-x-1/2 items-center gap-2 rounded-full bg-white px-6 text-sm font-black text-[#060611] shadow-[0_8px_32px_rgba(255,255,255,0.20)] hover:shadow-[0_12px_40px_rgba(255,255,255,0.28)] hover:scale-[1.03] transition sm:hidden"
       >
         <Plus className="h-5 w-5" />
         Post My Room
@@ -1408,7 +1408,7 @@ function PostModal({
           )}
         </AnimatePresence>
         <div className="pr-12">
-          <p className="text-sm font-black text-cyan-200">Post My Room</p>
+          <p className="text-sm font-black text-blue-400">Post My Room</p>
           <h2 className="mt-2 text-3xl font-black tracking-tight">Create a swap listing</h2>
         </div>
         <div className="mt-6 grid grid-cols-2 gap-2 rounded-full bg-white/8 p-1">
@@ -1543,7 +1543,7 @@ function PostModal({
             <button
               type="submit"
               disabled={isSubmitting || !canPublish}
-              className="h-14 w-full rounded-full bg-gradient-to-r from-cyan-300 via-blue-400 to-fuchsia-400 text-sm font-black text-[#050711] shadow-[0_20px_70px_rgba(56,189,248,0.28)] transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45"
+              className="h-14 w-full rounded-full bg-blue-500 text-sm font-black text-white shadow-[0_12px_40px_rgba(59,130,246,0.25)] transition hover:bg-blue-400 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-45"
             >
               {isSubmitting ? "Publishing..." : "Publish Swap Request"}
             </button>
