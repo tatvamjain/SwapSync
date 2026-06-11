@@ -1304,6 +1304,44 @@ function EmptyState({ onPost }: { onPost: () => void }) {
   );
 }
 
+function SwapCodeBox({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function copyCode() {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className="mx-auto mt-5 max-w-xs w-full rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-4 py-3">
+      <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-200">Swap Code</p>
+      <div className="mt-1 flex items-center justify-between gap-3">
+        <p className="text-2xl font-black tracking-wide text-white">{code}</p>
+        <button
+          type="button"
+          onClick={copyCode}
+          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black transition ${
+            copied
+              ? "bg-emerald-300 text-[#06130b]"
+              : "border border-emerald-300/40 bg-emerald-300/15 text-emerald-200 hover:bg-emerald-300/30"
+          }`}
+        >
+          {copied ? (
+            <>
+              <Check className="h-3.5 w-3.5" />
+              Copied!
+            </>
+          ) : (
+            "Copy"
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PostModal({
   form,
   setForm,
@@ -1382,10 +1420,7 @@ function PostModal({
                 <p className="mt-2 text-sm font-bold text-white/55">
                   Your listing is live. Save this code to mark it swapped later.
                 </p>
-                <div className="mx-auto mt-5 max-w-xs rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-4 py-3">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-200">Swap Code</p>
-                  <p className="mt-1 text-2xl font-black tracking-wide text-white">{postedCode}</p>
-                </div>
+                <SwapCodeBox code={postedCode} />
                 <div className="mx-auto mt-5 grid max-w-xs gap-3">
                   <a
                     href={postedWhatsAppUrl}
@@ -1491,7 +1526,17 @@ function PostModal({
               <div className="flex gap-2">
                 <input
                   value={roomTag}
-                  onChange={(event) => setRoomTag(digitsOnly(event.target.value).slice(0, 3))}
+                  onChange={(event) => {
+                    const val = digitsOnly(event.target.value).slice(0, 3);
+                    setRoomTag(val);
+                    // Auto-select floor based on first digit
+                    if (val.length >= 1) {
+                      const autoFloor = floorForRoom(val);
+                      if (!form.wants.floors.includes(autoFloor)) {
+                        setForm({ wants: { ...form.wants, floors: [autoFloor] } });
+                      }
+                    }
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault();
