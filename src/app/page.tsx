@@ -1316,13 +1316,13 @@ function SwapCodeBox({ code }: { code: string }) {
 
   return (
     <div className="mx-auto mt-5 max-w-xs w-full rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-4 py-3">
-      <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-200">Swap Code</p>
-      <div className="mt-1 flex items-center justify-between gap-3">
-        <p className="text-2xl font-black tracking-wide text-white">{code}</p>
+      <p className="text-[0.6rem] font-black uppercase tracking-[0.18em] text-emerald-300/70">Swap Code</p>
+      <div className="mt-1.5 flex items-center justify-between gap-2">
+        <p className="text-sm font-black tracking-widest text-white font-mono whitespace-nowrap">{code}</p>
         <button
           type="button"
           onClick={copyCode}
-          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black transition ${
+          className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[0.65rem] font-black transition ${
             copied
               ? "bg-emerald-300 text-[#06130b]"
               : "border border-emerald-300/40 bg-emerald-300/15 text-emerald-200 hover:bg-emerald-300/30"
@@ -1330,7 +1330,7 @@ function SwapCodeBox({ code }: { code: string }) {
         >
           {copied ? (
             <>
-              <Check className="h-3.5 w-3.5" />
+              <Check className="h-3 w-3" />
               Copied!
             </>
           ) : (
